@@ -22,6 +22,7 @@ export function Offers({
   const [q, setQ] = useState(initialQuery || "cimento");
   const [offers, setOffers] = useState<Offer[]>([]);
   const [partners, setPartners] = useState<Offer[]>([]);
+  const [reference, setReference] = useState<{ range?: string; note?: string; median?: number | null; unit?: string; source?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [sort, setSort] = useState(SORTS[0]);
@@ -34,10 +35,12 @@ export function Offers({
       const d = await request(`/offers?${params.toString()}`);
       setOffers(d.offers || []);
       setPartners(d.partner_stores || []);
+      setReference(d.reference || null);
       if (d.error) setError(d.error);
     } catch (e: any) {
       setOffers([]);
       setPartners([]);
+      setReference(null);
       setError(e.message || "Não foi possível carregar as ofertas.");
     } finally {
       setLoading(false);
@@ -166,8 +169,23 @@ export function Offers({
 
           {partners.length > 0 && (
             <>
-              <Text style={styles.partnerTitle}>Buscar direto nas lojas</Text>
-              {partners.map((p) => (
+              <View style={styles.partnerHeadRow}>
+                <Text style={styles.partnerTitle}>Buscar direto nas lojas</Text>
+                {reference?.median ? (
+                  <View style={styles.refBadge}>
+                    <Icon name="stats-chart-outline" size={11} color={colors.blue} />
+                    <Text style={styles.refBadgeText}>
+                      ~R$ {reference.median.toFixed(2)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              {reference?.note ? (
+                <Text style={styles.refNote}>
+                  {reference.source === "reference" ? "📊 " : "🔎 "}{reference.note}
+                </Text>
+              ) : null}
+              {partners.map((p: any) => (
                 <Pressable
                   key={p.id}
                   testID={`partner-${p.store}`}
@@ -179,11 +197,25 @@ export function Offers({
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.partnerName}>{p.store}</Text>
-                    <Text style={styles.partnerNote}>{p.note}</Text>
+                    {p.price_range ? (
+                      <Text style={styles.partnerRange}>Faixa esperada: {p.price_range}</Text>
+                    ) : (
+                      <Text style={styles.partnerNote}>{p.note}</Text>
+                    )}
                   </View>
-                  <Icon name="open-outline" size={18} color={colors.muted} />
+                  {p.estimated_price ? (
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={styles.partnerEstLabel}>ESTIMADO</Text>
+                      <Text style={styles.partnerEstPrice}>R$ {p.estimated_price.toFixed(2)}</Text>
+                    </View>
+                  ) : (
+                    <Icon name="open-outline" size={18} color={colors.muted} />
+                  )}
                 </Pressable>
               ))}
+              <Text style={styles.disclaimer}>
+                Preços estimados por referência nacional. Toque para ver o valor real na loja.
+              </Text>
             </>
           )}
         </>
@@ -215,9 +247,17 @@ const styles = StyleSheet.create({
   offerTotal: { color: colors.muted, fontSize: 10, marginTop: 2, fontWeight: "600" },
   addBtn: { flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", marginTop: 8, paddingVertical: 8, borderRadius: 8, backgroundColor: colors.pale },
   addBtnText: { color: colors.brand, fontSize: 12, fontWeight: "700" },
-  partnerTitle: { color: colors.ink, fontSize: 15, fontWeight: "700", marginTop: 24, marginBottom: 8 },
+  partnerHeadRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 24, marginBottom: 4 },
+  partnerTitle: { color: colors.ink, fontSize: 15, fontWeight: "700" },
+  refBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#E8F0F2", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  refBadgeText: { color: colors.blue, fontSize: 11, fontWeight: "700" },
+  refNote: { color: colors.muted, fontSize: 11, marginBottom: 10, lineHeight: 16, fontStyle: "italic" },
   partner: { flexDirection: "row", gap: 12, alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.line },
   partnerLogo: { width: 40, height: 40, borderRadius: 10, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" },
   partnerName: { color: colors.ink, fontWeight: "700", fontSize: 13 },
   partnerNote: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  partnerRange: { color: colors.blue, fontSize: 11, marginTop: 3, fontWeight: "600" },
+  partnerEstLabel: { color: colors.muted, fontSize: 9, fontWeight: "700", letterSpacing: 0.6 },
+  partnerEstPrice: { color: colors.green, fontWeight: "700", fontSize: 14, marginTop: 2 },
+  disclaimer: { color: colors.muted, fontSize: 10, marginTop: 12, textAlign: "center", lineHeight: 15, fontStyle: "italic" },
 });

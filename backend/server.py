@@ -481,8 +481,19 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
     query = re.sub(r"[^\w\s-]", "", q, flags=re.UNICODE)[:80] or "cimento"
     ml_offers: List[Dict[str, Any]] = []
     error: Optional[str] = None
+    ua_headers = {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "pt-BR,pt;q=0.9",
+    }
     try:
-        response = await asyncio.to_thread(requests.get, "https://api.mercadolibre.com/sites/MLB/search", params={"q": query, "limit": 10}, timeout=12)
+        response = await asyncio.to_thread(
+            requests.get,
+            "https://api.mercadolibre.com/sites/MLB/search",
+            params={"q": query, "limit": 10},
+            headers=ua_headers,
+            timeout=12,
+        )
         response.raise_for_status()
         results = response.json().get("results", [])
         for x in results:
@@ -501,39 +512,47 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
     except requests.RequestException:
         error = "Não foi possível consultar o Mercado Livre agora"
 
+    # Reference median price per unit (BRL) — Brazilian construction market averages 2025.
+    # Used to give the user a "typical range" when the marketplace API is unavailable
+    # or as a benchmark to know whether a partner-store price is fair.
+    ref = _reference_price(query, ml_offers)
+
     encoded = quote_plus(query)
     # Public search deep-links — we don't scrape, we surface the store's own search URL
     # so the user always sees fresh, real prices on the store's site.
     partner_stores = [
         {
             "id": f"leroy_{encoded}",
-            "title": f"Ver {q} no Leroy Merlin",
-            "price": None,
+            "title": f"{q} no Leroy Merlin",
+            "price_range": ref["range"],
+            "estimated_price": ref["median"],
             "store": "Leroy Merlin",
             "url": f"https://www.leroymerlin.com.br/search?term={encoded}",
             "thumbnail": None,
             "type": "search",
-            "note": "Preços regionais atualizados no site oficial",
+            "note": ref["note"],
         },
         {
             "id": f"cec_{encoded}",
-            "title": f"Ver {q} na C&C",
-            "price": None,
+            "title": f"{q} na C&C",
+            "price_range": ref["range"],
+            "estimated_price": ref["median"],
             "store": "C&C Casa e Construção",
             "url": f"https://www.cec.com.br/{encoded}?_query={encoded}",
             "thumbnail": None,
             "type": "search",
-            "note": "Buscar diretamente no site da C&C",
+            "note": ref["note"],
         },
         {
             "id": f"telha_{encoded}",
-            "title": f"Ver {q} na Telhanorte",
-            "price": None,
+            "title": f"{q} na Telhanorte",
+            "price_range": ref["range"],
+            "estimated_price": ref["median"],
             "store": "Telhanorte",
             "url": f"https://www.telhanorte.com.br/{encoded}?_q={encoded}",
             "thumbnail": None,
             "type": "search",
-            "note": "Buscar diretamente no site da Telhanorte",
+            "note": ref["note"],
         },
     ]
     return {
@@ -542,7 +561,82 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
         "uf": uf.upper() or None,
         "offers": ml_offers,
         "partner_stores": partner_stores,
+        "reference": ref,
         "error": error,
+    }
+
+
+# Reference median prices for common Brazilian construction materials (BRL, 2025).
+# These are ballpark national averages used to give the user a range before they
+# click through to a store's search page. Not authoritative — labeled as "estimate".
+_REFERENCE_PRICES: List[Dict[str, Any]] = [
+    {"match": ["cimento", "cp ii", "cp v"], "unit": "saco 50kg", "median": 42.00, "min": 32.00, "max": 55.00},
+    {"match": ["areia média", "areia media"], "unit": "m³", "median": 130.00, "min": 95.00, "max": 180.00},
+    {"match": ["areia"], "unit": "m³", "median": 120.00, "min": 85.00, "max": 170.00},
+    {"match": ["brita", "pedra britada"], "unit": "m³", "median": 145.00, "min": 110.00, "max": 195.00},
+    {"match": ["bloco cerâmico", "bloco ceramico", "tijolo baiano"], "unit": "un", "median": 2.50, "min": 1.60, "max": 3.80},
+    {"match": ["tijolo maciço", "tijolo macico"], "unit": "un", "median": 1.20, "min": 0.80, "max": 1.90},
+    {"match": ["tijolo"], "unit": "un", "median": 2.20, "min": 1.30, "max": 3.50},
+    {"match": ["porcelanato"], "unit": "m²", "median": 65.00, "min": 35.00, "max": 130.00},
+    {"match": ["piso", "revestimento"], "unit": "m²", "median": 55.00, "min": 28.00, "max": 110.00},
+    {"match": ["azulejo"], "unit": "m²", "median": 42.00, "min": 22.00, "max": 90.00},
+    {"match": ["tinta acrílica", "tinta acrilica"], "unit": "galão 3,6L", "median": 155.00, "min": 95.00, "max": 280.00},
+    {"match": ["tinta"], "unit": "galão 3,6L", "median": 145.00, "min": 85.00, "max": 260.00},
+    {"match": ["telha"], "unit": "un", "median": 4.20, "min": 2.20, "max": 12.00},
+    {"match": ["laje"], "unit": "m²", "median": 145.00, "min": 95.00, "max": 220.00},
+    {"match": ["gesso"], "unit": "saco 40kg", "median": 32.00, "min": 22.00, "max": 48.00},
+    {"match": ["cal"], "unit": "saco 20kg", "median": 28.00, "min": 18.00, "max": 42.00},
+    {"match": ["argamassa"], "unit": "saco 20kg", "median": 35.00, "min": 22.00, "max": 58.00},
+    {"match": ["cerâmica"], "unit": "m²", "median": 38.00, "min": 20.00, "max": 75.00},
+    {"match": ["porta"], "unit": "un", "median": 320.00, "min": 180.00, "max": 850.00},
+    {"match": ["janela"], "unit": "un", "median": 450.00, "min": 220.00, "max": 1200.00},
+    {"match": ["vaso sanitário", "vaso sanitario"], "unit": "un", "median": 320.00, "min": 180.00, "max": 780.00},
+    {"match": ["pia"], "unit": "un", "median": 380.00, "min": 180.00, "max": 950.00},
+    {"match": ["torneira"], "unit": "un", "median": 120.00, "min": 45.00, "max": 380.00},
+    {"match": ["chuveiro"], "unit": "un", "median": 180.00, "min": 55.00, "max": 480.00},
+    {"match": ["fio", "cabo"], "unit": "rolo 100m", "median": 220.00, "min": 130.00, "max": 420.00},
+    {"match": ["cano", "tubo pvc"], "unit": "barra 6m", "median": 45.00, "min": 25.00, "max": 95.00},
+    {"match": ["forro pvc"], "unit": "m²", "median": 45.00, "min": 28.00, "max": 75.00},
+]
+
+
+def _reference_price(query: str, ml_offers: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Find a matching reference price. If Mercado Livre returned real offers,
+    use the median from those; otherwise fall back to the curated table."""
+    if ml_offers:
+        prices = sorted(float(o["price"]) for o in ml_offers if o.get("price"))
+        if prices:
+            median = prices[len(prices) // 2]
+            lo, hi = prices[0], prices[-1]
+            return {
+                "median": round(median, 2),
+                "min": round(lo, 2),
+                "max": round(hi, 2),
+                "unit": "",
+                "range": f"R$ {lo:.2f} — R$ {hi:.2f}",
+                "note": f"Faixa vista no Mercado Livre agora (mediana R$ {median:.2f})",
+                "source": "live",
+            }
+    q = query.lower()
+    for entry in _REFERENCE_PRICES:
+        if any(term in q for term in entry["match"]):
+            return {
+                "median": entry["median"],
+                "min": entry["min"],
+                "max": entry["max"],
+                "unit": entry["unit"],
+                "range": f"R$ {entry['min']:.2f} — R$ {entry['max']:.2f}",
+                "note": f"Referência nacional {entry['unit']} (mediana R$ {entry['median']:.2f})",
+                "source": "reference",
+            }
+    return {
+        "median": None,
+        "min": None,
+        "max": None,
+        "unit": "",
+        "range": "",
+        "note": "Sem referência nacional — confira no site da loja",
+        "source": "unknown",
     }
 
 

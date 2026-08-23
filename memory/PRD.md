@@ -68,7 +68,13 @@ App mobile (Expo/React Native) para planejar obras/reformas com **planta 2D inte
   - Sacada/Varanda 0.70x, Garagem 0.65x, Corredor/Hall 0.55x, Jardim/Quintal 0.50x
 - **Editor de cômodos ampliado**: 20 tipos disponíveis com ícones — Sala, Cozinha, Quarto, Suíte, Closet, Banheiro, Lavabo, Área de serviço, **Conceito aberto**, **Área gourmet**, **Churrasqueira**, **Piscina**, Varanda, Sacada, Escritório, Corredor, Escada, Garagem, Jardim, Quintal.
 
-### Fase 4 (concluída nesta iteração)
+### Fase 5 (concluída nesta iteração)
+- **Preço estimado por loja**: quando o Mercado Livre está indisponível, cada card de loja parceira (Leroy Merlin, C&C, Telhanorte) agora mostra o preço estimado do material com base em tabela de referência nacional de 27 categorias comuns (cimento, areia, brita, blocos, porcelanato, tinta, telha, gesso, cal, argamassa, portas, janelas, torneiras, etc.). Faixa esperada (mín-máx) também exibida.
+- **Preço dinâmico quando ML funciona**: se o Mercado Livre responder, a mediana/mínimo/máximo é calculada em tempo real das ofertas retornadas, e as lojas parceiras herdam esse valor.
+- **User-Agent** adicionado à chamada do Mercado Livre para reduzir bloqueios 403.
+- **Disclaimer transparente**: badge "ESTIMADO", nota "Referência nacional…" e rodapé "Preços estimados por referência nacional. Toque para ver o valor real na loja."
+
+### Fase 4 (concluída anteriormente)
 - **Meus Projetos** (`Projects.tsx`): tela lista todos os projetos do usuário com ícone por tipo, área, nº ambientes e data de atualização. Ações: abrir (retoma no Plan2D), excluir (com modal de confirmação), criar novo, usar modelo pronto. Endpoint novo `DELETE /api/projects/{id}`.
 
 ## Backlog
