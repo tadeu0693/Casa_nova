@@ -36,7 +36,8 @@ App mobile (Expo/React Native) para planejar obras/reformas com **planta 2D inte
 | POST | `/api/projects` | Criar projeto |
 | GET | `/api/projects` | Listar |
 | PUT | `/api/projects/{id}` | Atualizar layout |
-| POST | `/api/estimate` | Estimador |
+| POST | `/api/estimate` | Estimador (materiais + per_room) |
+| GET | `/api/templates` | Modelos prontos |
 | GET | `/api/offers?q&uf&cep` | Multi-loja + frete |
 | POST | `/api/cart` | Adicionar |
 | GET | `/api/cart` | Listar + totais |
@@ -55,8 +56,13 @@ App mobile (Expo/React Native) para planejar obras/reformas com **planta 2D inte
 - 14/14 pytest (backend + regressão)
 - Testing agent Iteration 5: PASS (frontend/backend)
 
+### Fase 3 (concluída nesta iteração)
+- **Modelos Prontos** (`GET /api/templates`): 4 modelos com cômodos e posições pré-definidas — Kitnet 30m², Edícula 25m², Casa 60m² (2 quartos), Casa 90m² (3 quartos com suíte). Acessível pelo tile do Home e pelo CTA secundário do hero card.
+- **Tela de Alertas** (`Alerts.tsx`): lista de materiais monitorados com preço-alvo, criação via bottom-sheet com sugestões rápidas, deep-link para Ofertas com a busca pré-preenchida.
+- **Custo por Cômodo**: `POST /api/estimate` agora inclui `per_room[{name, area, cost, cost_per_m2, share}]`. Multiplicador de custo por tipo (Banheiro/Cozinha/Suíte = 1.35x, Área de serviço = 1.15x, Varanda/Quintal = 0.75x). Toggle segmentado no Estimator entre "Lista Completa" e "Por Ambiente" com barras visuais.
+
 ## Backlog
-- UI de Alertas de preço (endpoints prontos)
 - Planta 3D interativa
 - Compartilhar planta como imagem
 - Modo escuro
+- Notificações push para alertas de preço (requer build nativo)

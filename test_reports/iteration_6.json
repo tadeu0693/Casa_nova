@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 6 (Templates, per-room Estimator, Alerts UI) — ALL new features verified. Backend: 9/9 pytest passing (GET /api/templates returns 4 templates kitnet_30/edicula_25/casa_60/casa_90 each with correctly shaped rooms; POST /api/estimate returns per_room with area/cost/cost_per_m2/share where wet rooms Banheiro & Cozinha have 1.35x multiplier confirmed higher R$/m² than Sala/Quarto; alerts CRUD create→list→delete all pass; per-room shares sum to 100% and costs sum ≈ estimated_total within rounding). Frontend at 390x844: Home shows two new tiles (home-tile-templates, home-tile-alerts) and Hero secondary CTA (home-cta-templates 'ou use um modelo'). Templates screen lists all 4 cards with room-preview chips (Sala/Quarto, Cozinha, Banheiro + '+N' for larger houses). Tapping template-kitnet_30 creates a project via POST /api/projects and lands on Plan2D with 3 rooms (Sala/Quarto 5×4, Cozinha 3×2, Banheiro 2×2). Estimator segment 'LISTA COMPLETA' (default) shows materials; toggling POR AMBIENTE shows per-room breakdown with a cost bar (Sala/Quarto R$ 2,301.49 · 115.07/m² · 59.7%, Cozinha R$ 932.10 · 155.35/m² · 24.2%, Banheiro R$ 621.40 · 155.35/m² · 16.1%). Alerts screen: empty state → create via suggestion chip + price → alert appears in list → alert-view-{id} navigates to Offers with the query pre-filled ('Cimento 50kg' shown in the search input) → alert-remove-{id} deletes the alert. No React Native red screens. No deprecated packages detected. Pre-existing Reanimated shared-value read-during-render warnings still present from Plan2D (non-blocking; not new to this iteration).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Home",
+        "issues": [
+          "The bottom row (home-tile-alerts) sits close to the 83px tab bar on a 390x844 viewport — it's still reachable via scroll but on shorter devices the tile can be visually cropped. Consider adding bottom padding equal to tab-bar height inside Screen's ScrollView content."
+        ]
+      }
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase3_api.py",
+    "/app/test_reports/pytest/iteration_6.xml",
+    "/app/test_reports/ui/it6_home.png",
+    "/app/test_reports/ui/it6_templates.png",
+    "/app/test_reports/ui/it6_plan_kitnet.png",
+    "/app/test_reports/ui/it6_estimator_rooms.png",
+    "/app/test_reports/ui/it6_alerts_list.png",
+    "/app/test_reports/ui/it6_offers_prefill.png"
+  ],
+  "action_items": [
+    "Optional: Add bottom padding (or a spacer equal to tab-bar height ~90px) to the Home Screen's ScrollView content so the last row (home-tile-alerts) never sits under the tab bar on shorter phones.",
+    "Optional: Consider adding a testID to the Home hero secondary CTA container or reusing the existing home-cta-templates label to also match 'ou use um modelo' for easier automation (already works)."
+  ],
+  "critical_code_review_comments": [
+    "server.py room_multiplier logic is well-scoped and unit-covered by test_phase3_api.py (banheiro/cozinha 1.35, área/serviço 1.15, varanda/quintal 0.75). Per-room shares sum to 100% and per-room costs sum to estimated_total within 1 BRL rounding drift.",
+    "GET /api/templates is public (no auth) and returns a static, safe catalog — appropriate.",
+    "Templates.tsx and Alerts.tsx are small (<200 lines), use StyleSheet.create, wrap all text in <Text>, and use testIDs on every interactive element (template-{id}, alert-{id}, alert-view-{id}, alert-remove-{id}, suggest-{name}, alert-query, alert-price, alert-save).",
+    "Estimator segment toggle (view-materials/view-rooms) uses proper controlled state and forwards testIDs to each per-room row (room-cost-{name}).",
+    "Home hero card correctly wires 'ou use um modelo' to setTab('templates')."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase3_api.py",
+    "/app/test_reports/iteration_6.json"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% for testable flows"},
+  "seed_data_creation": "Two test alerts ('Cimento 50kg' at R$ 35.50 and R$ 39.90) were created for the demo user during pytest and UI runs; both were removed by the cleanup step at the end of the Playwright run and by DELETE in test_delete_alert.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use demo@constroifacil.app / senha123 at https://build-discount-hub.preview.emergentagent.com. New public endpoint GET /api/templates (no auth). POST /api/estimate now returns per_room:[{name,area,cost,cost_per_m2,share}]. Home has new tiles home-tile-templates and home-tile-alerts; Hero has secondary CTA home-cta-templates. Templates screen testID=templates-screen and each card testID=template-{id}. Alerts screen testID=alerts-screen; form fields alert-query & alert-price; save alert-save; per-alert testIDs alert-{id}, alert-view-{id}, alert-remove-{id}. Estimator toggle testIDs view-materials/view-rooms; each per-room row testID=room-cost-{name}. Home ScrollView needs scrolling to reveal home-tile-alerts on 390x844 (last row is partly under 83px tab bar).",
+  "rca_of_issue": "Not applicable — no bugs surfaced. Only a minor UX observation: bottom tile (home-tile-alerts) can be partially hidden behind the fixed 83px tab bar because the Home ScrollView's contentContainer does not add extra bottom padding for the tab-bar. Mitigation: add paddingBottom ~ 100 to the Screen/ScrollView contentContainerStyle used by Home."
+}

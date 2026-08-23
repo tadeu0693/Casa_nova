@@ -68,7 +68,7 @@ export function Chip({ label, active, onPress, testID }: { label: string; active
 
 export const ui = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: 20, paddingBottom: 120 },
+  scroll: { padding: 20, paddingBottom: 140 },
   field: { marginTop: 20 },
   label: { color: colors.muted, fontSize: 12, fontWeight: "700", marginBottom: 8, letterSpacing: 0.3 },
   input: { height: 50, borderWidth: 1, borderColor: colors.line, borderRadius: 12, paddingHorizontal: 15, color: colors.ink, fontSize: 16, backgroundColor: colors.white },

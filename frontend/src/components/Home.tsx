@@ -28,8 +28,12 @@ export function Home({ user, go, cep, onEditCep }: { user: User; go: (s: string)
           <Text style={styles.heroKicker}>COMECE PELO SEU PROJETO</Text>
           <Text style={styles.heroCardTitle}>Da ideia à obra,{"\n"}sem complicação.</Text>
           <Pressable testID="home-cta-builder" onPress={() => go("builder")} style={styles.heroLink}>
-            <Text style={styles.heroLinkText}>Criar projeto</Text>
+            <Text style={styles.heroLinkText}>Criar do zero</Text>
             <Icon name="arrow-forward" size={16} color="#fff" />
+          </Pressable>
+          <Pressable testID="home-cta-templates" onPress={() => go("templates")} style={styles.heroLinkGhost}>
+            <Icon name="sparkles-outline" size={14} color="#fff" />
+            <Text style={styles.heroLinkText}>ou use um modelo</Text>
           </Pressable>
         </View>
         <View style={styles.blueprint}>
@@ -40,12 +44,16 @@ export function Home({ user, go, cep, onEditCep }: { user: User; go: (s: string)
       </View>
       <Text style={styles.sectionTitle}>Atalhos</Text>
       <View style={styles.tiles}>
+        <Action testID="home-tile-templates" icon="sparkles-outline" title="Modelos prontos" text="Kitnet, Casa, Edícula" onPress={() => go("templates")} />
         <Action testID="home-tile-plan" icon="grid-outline" title="Planta 2D" text="Desenhe seus cômodos" onPress={() => go("builder")} />
-        <Action testID="home-tile-offers" icon="pricetag-outline" title="Ofertas" text="Compare por CEP" onPress={() => go("offers")} />
       </View>
       <View style={[styles.tiles, { marginTop: 12 }]}>
+        <Action testID="home-tile-offers" icon="pricetag-outline" title="Ofertas" text="Compare por CEP" onPress={() => go("offers")} />
         <Action testID="home-tile-cart" icon="basket-outline" title="Carrinho" text="Compare lojas" onPress={() => go("cart")} />
+      </View>
+      <View style={[styles.tiles, { marginTop: 12 }]}>
         <Action testID="home-tile-alerts" icon="notifications-outline" title="Alertas" text="Fique de olho no preço" onPress={() => go("alerts")} />
+        <View style={{ flex: 1 }} />
       </View>
       <Text style={styles.sectionTitle}>Como funciona</Text>
       <View style={styles.step}>
@@ -94,6 +102,7 @@ const styles = StyleSheet.create({
   heroKicker: { color: "#FADBCB", letterSpacing: 1.1, fontSize: 10, fontWeight: "700" },
   heroCardTitle: { color: "#fff", fontSize: 25, lineHeight: 30, fontWeight: "700", marginTop: 12 },
   heroLink: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 24 },
+  heroLinkGhost: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, opacity: 0.85 },
   heroLinkText: { color: "#fff", fontWeight: "700", fontSize: 14 },
   blueprint: { width: 105, height: 135, backgroundColor: colors.brandDark, borderRadius: 12, alignItems: "center", justifyContent: "center", gap: 10, transform: [{ rotate: "5deg" }], marginTop: 8 },
   blueprintLine: { width: 65, height: 1, backgroundColor: "#F4C5AD" },

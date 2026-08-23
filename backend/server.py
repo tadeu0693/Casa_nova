@@ -234,13 +234,122 @@ async def estimate(body: ProjectInput, authorization: Optional[str] = Header(def
     area = body.width * body.length
     rooms = body.rooms or [Room(name="Ambiente principal", width=body.width, length=body.length)]
     materials = [
-        {"name": "Cimento 50kg", "quantity": max(1, round(area * 0.35)), "unit": "sacos", "category": "Estrutura", "room": "Todos", "search": "cimento saco 50kg"},
-        {"name": "Areia média", "quantity": round(area * 0.045, 1), "unit": "m³", "category": "Estrutura", "room": "Todos", "search": "areia média construção"},
-        {"name": "Bloco cerâmico", "quantity": round(area * 16), "unit": "un", "category": "Alvenaria", "room": "Todos", "search": "bloco cerâmico 9x19x19"},
-        {"name": "Piso/ revestimento", "quantity": round(area * 1.1, 1), "unit": "m²", "category": "Acabamento", "room": "Todos", "search": "piso porcelanato 60x60"},
-        {"name": "Tinta acrílica", "quantity": max(1, round(area * 0.12)), "unit": "galões", "category": "Acabamento", "room": "Todos", "search": "tinta acrílica 3,6L"},
+        {"name": "Cimento 50kg", "quantity": max(1, round(area * 0.35)), "unit": "sacos", "category": "Estrutura", "room": "Todos", "search": "cimento saco 50kg", "unit_cost": 42.0},
+        {"name": "Areia média", "quantity": round(area * 0.045, 1), "unit": "m³", "category": "Estrutura", "room": "Todos", "search": "areia média construção", "unit_cost": 130.0},
+        {"name": "Bloco cerâmico", "quantity": round(area * 16), "unit": "un", "category": "Alvenaria", "room": "Todos", "search": "bloco cerâmico 9x19x19", "unit_cost": 2.5},
+        {"name": "Piso/ revestimento", "quantity": round(area * 1.1, 1), "unit": "m²", "category": "Acabamento", "room": "Todos", "search": "piso porcelanato 60x60", "unit_cost": 65.0},
+        {"name": "Tinta acrílica", "quantity": max(1, round(area * 0.12)), "unit": "galões", "category": "Acabamento", "room": "Todos", "search": "tinta acrílica 3,6L", "unit_cost": 155.0},
     ]
-    return {"area": round(area, 1), "rooms": [r.model_dump() for r in rooms], "materials": materials, "estimated_total": round(area * 128.5, 2), "note": "Estimativa inicial. Confirme o projeto com um profissional responsável."}
+    total = round(area * 128.5, 2)
+    # Per-room cost: proportional to area with category-specific multipliers.
+    # Banheiro/cozinha: mais caros por m² (revestimento e hidráulica).
+    def room_multiplier(name: str) -> float:
+        n = name.lower()
+        if "banh" in n or "cozin" in n or "suíte" in n or "suite" in n:
+            return 1.35
+        if "área" in n or "area" in n or "serviço" in n or "servico" in n:
+            return 1.15
+        if "varand" in n or "quintal" in n:
+            return 0.75
+        return 1.0
+    # Normalize so weighted sum = total.
+    weighted = [
+        (r, r.width * r.length * room_multiplier(r.name))
+        for r in rooms
+    ]
+    weighted_total = sum(w for _, w in weighted) or 1
+    per_room = []
+    for r, w in weighted:
+        room_cost = round(total * (w / weighted_total), 2)
+        room_area = round(r.width * r.length, 2)
+        per_room.append({
+            "name": r.name,
+            "area": room_area,
+            "cost": room_cost,
+            "cost_per_m2": round(room_cost / room_area, 2) if room_area else 0,
+            "share": round((w / weighted_total) * 100, 1),
+        })
+    return {
+        "area": round(area, 1),
+        "rooms": [r.model_dump() for r in rooms],
+        "materials": materials,
+        "estimated_total": total,
+        "per_room": per_room,
+        "note": "Estimativa inicial. Confirme o projeto com um profissional responsável.",
+    }
+
+
+@api.get("/templates")
+async def templates():
+    """Public catalog of pre-configured project templates users can start from."""
+    return {
+        "templates": [
+            {
+                "id": "kitnet_30",
+                "name": "Kitnet 30m²",
+                "description": "Ambiente único integrado + banheiro. Perfeito para primeiro imóvel ou locação.",
+                "icon": "bed-outline",
+                "build_type": "Edícula",
+                "width": 5.0,
+                "length": 6.0,
+                "rooms": [
+                    {"name": "Sala/Quarto", "width": 5.0, "length": 4.0, "x": 0, "y": 0},
+                    {"name": "Cozinha", "width": 3.0, "length": 2.0, "x": 0, "y": 4},
+                    {"name": "Banheiro", "width": 2.0, "length": 2.0, "x": 3.0, "y": 4},
+                ],
+            },
+            {
+                "id": "edicula_25",
+                "name": "Edícula 25m²",
+                "description": "Área externa com sala/quarto, cozinha e banheiro. Ideal para quintal.",
+                "icon": "home-outline",
+                "build_type": "Edícula",
+                "width": 5.0,
+                "length": 5.0,
+                "rooms": [
+                    {"name": "Sala/Quarto", "width": 3.0, "length": 5.0, "x": 0, "y": 0},
+                    {"name": "Cozinha", "width": 2.0, "length": 3.0, "x": 3.0, "y": 0},
+                    {"name": "Banheiro", "width": 2.0, "length": 2.0, "x": 3.0, "y": 3.0},
+                ],
+            },
+            {
+                "id": "casa_60",
+                "name": "Casa 60m² · 2 quartos",
+                "description": "Sala, cozinha, 2 quartos, banheiro e área de serviço.",
+                "icon": "home",
+                "build_type": "Casa térrea",
+                "width": 8.0,
+                "length": 7.5,
+                "rooms": [
+                    {"name": "Sala", "width": 4.0, "length": 4.0, "x": 0, "y": 0},
+                    {"name": "Cozinha", "width": 4.0, "length": 3.5, "x": 4.0, "y": 0},
+                    {"name": "Quarto 1", "width": 3.0, "length": 3.5, "x": 0, "y": 4.0},
+                    {"name": "Quarto 2", "width": 3.0, "length": 3.5, "x": 3.0, "y": 4.0},
+                    {"name": "Banheiro", "width": 2.0, "length": 2.0, "x": 6.0, "y": 4.0},
+                    {"name": "Área de serviço", "width": 2.0, "length": 1.5, "x": 6.0, "y": 6.0},
+                ],
+            },
+            {
+                "id": "casa_90",
+                "name": "Casa 90m² · 3 quartos",
+                "description": "Sala ampla, cozinha, 3 quartos (1 suíte), banheiro social e área de serviço.",
+                "icon": "business-outline",
+                "build_type": "Casa térrea",
+                "width": 10.0,
+                "length": 9.0,
+                "rooms": [
+                    {"name": "Sala", "width": 5.0, "length": 4.5, "x": 0, "y": 0},
+                    {"name": "Cozinha", "width": 5.0, "length": 3.5, "x": 5.0, "y": 0},
+                    {"name": "Suíte", "width": 3.5, "length": 4.0, "x": 0, "y": 4.5},
+                    {"name": "Banh. suíte", "width": 2.0, "length": 2.0, "x": 3.5, "y": 4.5},
+                    {"name": "Quarto 2", "width": 3.0, "length": 3.5, "x": 0, "y": 8.5},
+                    {"name": "Quarto 3", "width": 3.0, "length": 3.5, "x": 3.0, "y": 8.5},
+                    {"name": "Banheiro", "width": 2.0, "length": 2.0, "x": 5.5, "y": 4.5},
+                    {"name": "Área serviço", "width": 2.5, "length": 2.5, "x": 7.5, "y": 4.5},
+                ],
+            },
+        ]
+    }
 
 
 def _freight_for(uf: str, price: float) -> float:

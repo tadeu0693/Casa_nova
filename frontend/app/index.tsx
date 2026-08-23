@@ -12,6 +12,8 @@ import { Plan2D } from "@/src/components/Plan2D";
 import { Estimator } from "@/src/components/Estimator";
 import { Offers } from "@/src/components/Offers";
 import { Cart } from "@/src/components/Cart";
+import { Templates } from "@/src/components/Templates";
+import { Alerts } from "@/src/components/Alerts";
 import { CepModal } from "@/src/components/CepModal";
 import type { CepData, Offer, Project, User } from "@/src/types";
 
@@ -20,7 +22,7 @@ const CEP_KEY = "constroi_facil_cep";
 export default function Index() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<"home" | "builder" | "plan" | "estimate" | "offers" | "cart">("home");
+  const [tab, setTab] = useState<"home" | "builder" | "plan" | "estimate" | "offers" | "cart" | "templates" | "alerts">("home");
   const [project, setProject] = useState<Project | null>(null);
   const [cep, setCep] = useState<CepData | null>(null);
   const [showCepModal, setShowCepModal] = useState(false);
@@ -149,6 +151,23 @@ export default function Index() {
     );
   } else if (tab === "cart") {
     content = <Cart onExplore={() => setTab("offers")} />;
+  } else if (tab === "templates") {
+    content = (
+      <Templates
+        onBack={() => setTab("home")}
+        onPick={async (p) => {
+          try {
+            const saved = await request("/projects", { method: "POST", body: JSON.stringify({ ...p, cep: cep?.cep || "" }) });
+            setProject(saved);
+          } catch {
+            setProject(p);
+          }
+          setTab("plan");
+        }}
+      />
+    );
+  } else if (tab === "alerts") {
+    content = <Alerts onBack={() => setTab("home")} onSeeOffers={openOffersFor} />;
   } else {
     content = (
       <Offers
