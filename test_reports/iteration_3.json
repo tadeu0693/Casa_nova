@@ -1,0 +1,47 @@
+{
+  "summary": "Final regression validated login, home, builder, 2D planta, orçamento and offers recovery at 390x844. All API regression tests pass and GET /api/offers currently returns HTTP 200 JSON; no red screen or horizontal overflow occurred.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Offers error state",
+        "issue": "Inline recovery card is cramped on 390px mobile: error message wraps into a very narrow column and the retry button overlaps/crowds the message.",
+        "testID": "offers-retry",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Ofertas",
+        "issues": ["Error card needs a vertical layout or full-width retry button so message and action remain readable at 390x844."]
+      }
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_3.json",
+    "/app/test_reports/pytest/final_results_env.xml",
+    "/app/backend/tests/test_api_regression.py",
+    "/app/test_reports/ui/final/offers.png"
+  ],
+  "action_items": [
+    "Rework Offers error card spacing/flex direction for narrow mobile widths.",
+    "Align frontend API configuration with the required EXPO_BACKEND_URL key (or explicitly preserve and document the configured EXPO_PUBLIC_BACKEND_URL fallback)."
+  ],
+  "critical_code_review_comments": [
+    "index.tsx reads EXPO_PUBLIC_BACKEND_URL, while the requested/protected frontend key EXPO_BACKEND_URL is absent; this is currently functional only because the alternate key is configured.",
+    "Most core interactive controls still lack testID attributes, reducing robust mobile regression coverage; requested offers testIDs are present.",
+    "Backend logs retain a passlib/bcrypt compatibility warning during password operations, although login tests pass."
+  ],
+  "updated_files": ["/app/test_reports/iteration_3.json"],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100% functional flow; 1 mobile design issue"},
+  "seed_data_creation": "Existing regression test creates TEST_regression_project records; no seeded data was modified.",
+  "retest_needed": true,
+  "should_call_test_agent_after_fix": true,
+  "context_for_next_testing_agent": "Use demo@constroifacil.app / senha123 and public preview https://build-discount-hub.preview.emergentagent.com. Offers upstream is NOT MOCKED; current public endpoint normalizes failure to HTTP 200 JSON with offers: [] and error. Verify error-card layout after fixes.",
+  "rca_of_issue": "The offers failure state uses a horizontal flex row for icon, title/body, and retry button. At 390px, the middle text flexes too narrowly while the button retains width, causing excessive wrapping and visual crowding/overlap. API failure handling itself is recovered correctly: request rejection is caught and offers-retry renders without an Expo red screen."
+}

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="2" failures="1" skipped="0" tests="3" time="0.414" timestamp="2026-08-23T17:24:53.320769+00:00" hostname="agent-env-813aa412-9b9d-406c-b1f4-63d84a867560"><testcase classname="tests.test_api_regression" name="test_auth_me_and_projects" time="0.001"><error message="failed on setup with &quot;requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?&quot;">backend/tests/test_api_regression.py:19: in session_token
+    response = api_client.post(
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:712: in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?</error></testcase><testcase classname="tests.test_api_regression" name="test_create_project_and_estimate" time="0.001"><error message="failed on setup with &quot;requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?&quot;">backend/tests/test_api_regression.py:19: in session_token
+    response = api_client.post(
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:712: in post
+    return self.request("POST", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL 'None/api/auth/login': No scheme supplied. Perhaps you meant https://None/api/auth/login?</error></testcase><testcase classname="tests.test_api_regression" name="test_offers_returns_structured_external_failure" time="0.001"><failure message="requests.exceptions.MissingSchema: Invalid URL 'None/api/offers?q=cimento': No scheme supplied. Perhaps you meant https://None/api/offers?q=cimento?">backend/tests/test_api_regression.py:61: in test_offers_returns_structured_external_failure
+    response = api_client.get(f"{BASE_URL}/api/offers?q=cimento", timeout=20)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:671: in get
+    return self.request("GET", url, params=params, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:635: in request
+    prep = self.prepare_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:541: in prepare_request
+    p.prepare(
+/root/.venv/lib/python3.11/site-packages/requests/models.py:439: in prepare
+    self.prepare_url(url, params)
+/root/.venv/lib/python3.11/site-packages/requests/models.py:514: in prepare_url
+    raise MissingSchema(
+E   requests.exceptions.MissingSchema: Invalid URL 'None/api/offers?q=cimento': No scheme supplied. Perhaps you meant https://None/api/offers?q=cimento?</failure></testcase></testsuite></testsuites>

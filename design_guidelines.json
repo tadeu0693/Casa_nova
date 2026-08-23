@@ -1,0 +1,149 @@
+{
+  "app_name": "ConstróiFácil",
+  "personality": "1 iOS-Native Clean",
+  "personality_one_liner": "A precise, clean, and trustworthy mobile companion for regional construction savings and 2D/3D custom project planning.",
+  "color": {
+    "surface": "#F8F7F4",
+    "onSurface": "#1A1A1A",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#1A1A1A",
+    "surfaceTertiary": "#EFECE6",
+    "onSurfaceTertiary": "#333333",
+    "surfaceInverse": "#1A1A1A",
+    "onSurfaceInverse": "#F8F7F4",
+    "brand": "#C85A32",
+    "brandPrimary": "#C85A32",
+    "onBrandPrimary": "#FFFFFF",
+    "brandSecondary": "#D87A54",
+    "onBrandSecondary": "#FFFFFF",
+    "brandTertiary": "#FCECE6",
+    "onBrandTertiary": "#C85A32",
+    "success": "#388E3C",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F57C00",
+    "onWarning": "#FFFFFF",
+    "error": "#D32F2F",
+    "onError": "#FFFFFF",
+    "info": "#0288D1",
+    "onInfo": "#FFFFFF",
+    "border": "#E2DFD8",
+    "borderStrong": "#C85A32",
+    "divider": "#EBE7DF"
+  },
+  "typography": {
+    "displayFontFamily": "Satoshi",
+    "textFontFamily": "Geist",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous iOS vertical rhythm, clean grouping, safe area padding, sticky action bars.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "Ionicons",
+  "glassmorphism": {
+    "enabled": true,
+    "dos": [
+      "Use frosted glass on sticky search and bottom navigation bars over scrolling content",
+      "Use translucent tinted base for glass headers with ≥75% opacity"
+    ],
+    "donts": [
+      "Never blur form fields or entire body content",
+      "Never rely on blur alone without color tint contrast"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "Overview of regional construction discounts, saved project drafts, and quick-access tools for room planning and CEP offers.",
+      "states": {
+        "loading": "Centered spinner with warm branding",
+        "empty": "Illustration + 'Nenhum projeto ou oferta na sua região' + CTA 'Criar Novo Cômodo'",
+        "error": "Error message banner + 'Tentar Novamente' button"
+      },
+      "layout": "Sticky search header with CEP picker, horizontal quick categories, featured regional savings banner, recent project cards, and sticky bottom navigation."
+    },
+    {
+      "name": "RoomPlanner",
+      "purpose": "Detailed 2D room editor with dimensions and interactive material swatch toggles for instant 3D/2D preview and quantity generation.",
+      "states": {
+        "loading": "Skeleton room grid loader",
+        "empty": "Blueprint placeholder + 'Adicione paredes ou elementos ao cômodo'",
+        "error": "Failed to load room geometry state + 'Restaurar Rascunho'"
+      },
+      "layout": "Interactive canvas with grid toggle, dimensions toolbar, surface swatch selector tray at the bottom, and action button to 'Calcular Materiais'."
+    },
+    {
+      "name": "OffersCEP",
+      "purpose": "Public construction material offers filtered by CEP with transparent pricing, regional store breakdown, and shipping calculations.",
+      "states": {
+        "loading": "Skeleton store rows with price pulses",
+        "empty": "Store icon + 'Nenhuma oferta encontrada para este CEP' + 'Ampliar Raio'",
+        "error": "Connection error state + 'Atualizar Cotação'"
+      },
+      "layout": "Top CEP input bar, filter chips (Preço, Frete, Distância), vertical list of regional store offers with shipping delta chips, and compare cart tray."
+    },
+    {
+      "name": "ComparisonCart",
+      "purpose": "Smart comparative basket combining items from multiple regional stores to achieve the lowest total cost with delivery breakdown.",
+      "states": {
+        "loading": "Calculating best store combination loader",
+        "empty": "Shopping bag icon + 'Carrinho comparativo vazio' + 'Adicionar Materiais do Projeto'",
+        "error": "Failed to sync regional store prices + 'Recalcular'"
+      },
+      "layout": "Grouped store breakdown list, item quantity controls, delivery fee summary, total savings comparison badge, and sticky checkout CTA."
+    },
+    {
+      "name": "PriceAlerts",
+      "purpose": "Track desired materials and manage drop alerts for regional price shifts.",
+      "states": {
+        "loading": "Skeleton alert list",
+        "empty": "Bell icon + 'Nenhum alerta ativo' + 'Pesquisar Material'",
+        "error": "Sync error + 'Tentar novamente'"
+      },
+      "layout": "Active alerts list with target price thresholds, price history badge, 'Adicionar Novo Alerta' button, and notification toggles."
+    }
+  ],
+  "images": {
+    "hero_blueprint": {
+      "url": "https://images.unsplash.com/photo-1721244654392-9c912a6eb236?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDV8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBpbnRlcmlvciUyMGFyY2hpdGVcdHVyZSUyMHJvb20lMjBibHVlcHJpbnQlMjBhcmNoaXRlY3R1cmFsJTIwZGVzaWdufGVufDB8fHx8MTc4NzUwNjczM3ww&ixlib=rb-4.1.0&q=85",
+      "alt": "Architectural blueprint and interior room design"
+    },
+    "store_logo_leroy": {
+      "url": "https://images.pexels.com/photos/29588789/pexels-photo-29588789.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Regional store warehouse facade"
+    }
+  },
+  "instructions_to_main_agent": "Ensure all screen navigation flows seamlessly between Home, Room Planner (2D/3D), CEP Offers, Comparison Cart, and Price Alerts. Adhere strictly to the iOS-Clean warm sand and terracotta palette, maintaining touch targets >= 44x44pt and safe area insets. Never use banned blue/indigo/purple hues or raw hexes in components. Use real PNG logos or initials fallbacks with tinted containers."
+}

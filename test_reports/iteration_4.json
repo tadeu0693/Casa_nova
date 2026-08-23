@@ -1,0 +1,33 @@
+{
+  "summary": "Revalidated the complete mobile flow at 390x844: login, home, builder, planta 2D, orçamento and ofertas. Backend regression tests pass 3/3; offers failure state remains structured and retryable without red screen or horizontal overflow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/pytest/iteration_4_env.xml",
+    "/app/backend/tests/test_api_regression.py",
+    "/app/test_reports/ui/iteration_4/flow.png"
+  ],
+  "action_items": [
+    "Consider adding testID attributes to login, builder, navigation and estimate controls for more robust automated coverage.",
+    "Keep the configured EXPO_PUBLIC_BACKEND_URL fallback aligned with the protected environment naming expected by deployment."
+  ],
+  "critical_code_review_comments": [
+    "Offers upstream is NOT MOCKED; Mercado Livre may legitimately return the normalized unavailable state.",
+    "Backend logs still show a passlib/bcrypt compatibility warning, although authentication succeeds and no request failure was observed."
+  ],
+  "updated_files": ["/app/test_reports/iteration_4.json"],
+  "success_rate": {"backend": "100% (3/3)", "frontend": "100% functional flow"},
+  "seed_data_creation": "Regression tests create TEST_regression_project records; no seeded data was modified.",
+  "retest_needed": false,
+  "should_call_test_agent_after_fix": false,
+  "context_for_next_testing_agent": "Use demo@constroifacil.app / senha123 and https://build-discount-hub.preview.emergentagent.com. Offers external API is real, not mocked; verify either normalized results or the vertical retry card.",
+  "rca_of_issue": "The prior cramped offers error card is resolved: the error container now uses a vertical layout with stretch alignment and a full-width retry action. This run reproduced the readable card and successful retry interaction."
+}

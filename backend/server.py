@@ -1,0 +1,377 @@
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+from urllib.parse import quote_plus
+import logging
+import os
+import re
+import uuid
+import asyncio
+
+import requests
+from dotenv import load_dotenv
+from fastapi import APIRouter, FastAPI, HTTPException, Header
+from passlib.context import CryptContext
+from pydantic import BaseModel, EmailStr, Field
+from motor.motor_asyncio import AsyncIOMotorClient
+from starlette.middleware.cors import CORSMiddleware
+
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / ".env")
+client = AsyncIOMotorClient(os.environ["MONGO_URL"])
+db = client[os.environ["DB_NAME"]]
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+app = FastAPI(title="ConstróiFácil API")
+api = APIRouter(prefix="/api")
+logger = logging.getLogger(__name__)
+
+# Freight distance factor from São Paulo hub (a rough public heuristic — good enough for
+# an estimate before checkout on the real store page). Multipliers over a base freight
+# per kg of estimated weight, plus regional flat rate.
+FREIGHT_TABLE: Dict[str, Dict[str, float]] = {
+    "SP": {"base": 18.0, "days": 2}, "RJ": {"base": 24.0, "days": 3},
+    "MG": {"base": 26.0, "days": 3}, "ES": {"base": 32.0, "days": 4},
+    "PR": {"base": 28.0, "days": 3}, "SC": {"base": 32.0, "days": 4},
+    "RS": {"base": 38.0, "days": 5}, "BA": {"base": 42.0, "days": 5},
+    "PE": {"base": 48.0, "days": 6}, "CE": {"base": 52.0, "days": 6},
+    "DF": {"base": 34.0, "days": 4}, "GO": {"base": 34.0, "days": 4},
+    "MT": {"base": 44.0, "days": 5}, "MS": {"base": 38.0, "days": 5},
+    "PA": {"base": 68.0, "days": 8}, "AM": {"base": 78.0, "days": 9},
+    "RO": {"base": 72.0, "days": 8}, "AC": {"base": 82.0, "days": 9},
+    "AP": {"base": 78.0, "days": 9}, "RR": {"base": 82.0, "days": 9},
+    "TO": {"base": 52.0, "days": 6}, "MA": {"base": 55.0, "days": 6},
+    "PI": {"base": 55.0, "days": 6}, "RN": {"base": 55.0, "days": 6},
+    "PB": {"base": 52.0, "days": 6}, "AL": {"base": 52.0, "days": 6},
+    "SE": {"base": 52.0, "days": 6},
+}
+
+
+class Credentials(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=6)
+    name: Optional[str] = None
+
+
+class SessionInput(BaseModel):
+    session_id: str
+
+
+class Room(BaseModel):
+    name: str
+    width: float = Field(gt=0)
+    length: float = Field(gt=0)
+    x: float = 0
+    y: float = 0
+
+
+class ProjectInput(BaseModel):
+    name: str = "Meu projeto"
+    build_type: str = "Casa térrea"
+    width: float = Field(gt=0)
+    length: float = Field(gt=0)
+    rooms: List[Room] = []
+    cep: str = ""
+
+
+class CartItem(BaseModel):
+    offer_id: str
+    title: str
+    price: float
+    store: str
+    url: str = ""
+    thumbnail: str = ""
+    freight: float = 0.0
+    quantity: int = 1
+
+
+class AlertInput(BaseModel):
+    query: str
+    target_price: float = Field(gt=0)
+
+
+def clean(doc: Dict[str, Any]) -> Dict[str, Any]:
+    doc.pop("_id", None)
+    return doc
+
+
+async def current_user(authorization: Optional[str]) -> Dict[str, Any]:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(401, "Sessão necessária")
+    token = authorization.split(" ", 1)[1]
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not session:
+        raise HTTPException(401, "Sessão expirada")
+    expires = session["expires_at"]
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires < datetime.now(timezone.utc):
+        raise HTTPException(401, "Sessão expirada")
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(401, "Usuário não encontrado")
+    return user
+
+
+async def issue_session(user: Dict[str, Any]) -> Dict[str, Any]:
+    token = uuid.uuid4().hex + uuid.uuid4().hex
+    now = datetime.now(timezone.utc)
+    await db.user_sessions.insert_one({"session_token": token, "user_id": user["user_id"], "created_at": now, "expires_at": now + timedelta(days=7)})
+    return {"session_token": token, "user": clean(dict(user))}
+
+
+@app.on_event("startup")
+async def indexes():
+    await db.users.create_index("email", unique=True)
+    await db.users.create_index("user_id", unique=True)
+    await db.user_sessions.create_index("session_token", unique=True)
+    await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
+    await db.projects.create_index([("user_id", 1), ("project_id", 1)], unique=True)
+    await db.cart_items.create_index([("user_id", 1), ("offer_id", 1)], unique=True)
+    await db.alerts.create_index([("user_id", 1), ("query", 1)])
+
+
+@api.post("/auth/register")
+async def register(body: Credentials):
+    email = body.email.lower()
+    if await db.users.find_one({"email": email}, {"_id": 0}):
+        raise HTTPException(409, "Este e-mail já está cadastrado")
+    user = {"user_id": "user_" + uuid.uuid4().hex[:12], "email": email, "name": body.name or email.split("@")[0], "password_hash": pwd_context.hash(body.password), "created_at": datetime.now(timezone.utc)}
+    await db.users.insert_one(dict(user))
+    user.pop("password_hash", None)
+    return await issue_session(user)
+
+
+@api.post("/auth/login")
+async def login(body: Credentials):
+    user = await db.users.find_one({"email": body.email.lower()}, {"_id": 0})
+    if not user or not user.get("password_hash") or not pwd_context.verify(body.password, user["password_hash"]):
+        raise HTTPException(401, "E-mail ou senha incorretos")
+    user.pop("password_hash", None)
+    return await issue_session(user)
+
+
+@api.post("/auth/session")
+async def google_session(body: SessionInput):
+    try:
+        response = await asyncio.to_thread(requests.get, "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data", headers={"X-Session-ID": body.session_id}, timeout=15)
+        if response.status_code != 200:
+            raise HTTPException(401, "Não foi possível concluir o login Google")
+        data = response.json()
+        email = data.get("email", "").lower()
+        if not email:
+            raise HTTPException(401, "Identidade Google inválida")
+        user = await db.users.find_one({"email": email}, {"_id": 0})
+        if not user:
+            user = {"user_id": "user_" + uuid.uuid4().hex[:12], "email": email, "name": data.get("name") or email.split("@")[0], "picture": data.get("picture"), "created_at": datetime.now(timezone.utc)}
+            await db.users.insert_one(dict(user))
+        return await issue_session(user)
+    except requests.RequestException:
+        raise HTTPException(502, "Serviço Google indisponível")
+
+
+@api.get("/auth/me")
+async def me(authorization: Optional[str] = Header(default=None)):
+    return {"user": clean(dict(await current_user(authorization)))}
+
+
+@api.get("/cep/{cep}")
+async def cep_lookup(cep: str):
+    digits = re.sub(r"\D", "", cep)
+    if len(digits) != 8:
+        raise HTTPException(400, "CEP inválido — informe 8 dígitos")
+    try:
+        response = await asyncio.to_thread(requests.get, f"https://viacep.com.br/ws/{digits}/json/", timeout=8)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("erro"):
+            raise HTTPException(404, "CEP não encontrado")
+        uf = data.get("uf", "").upper()
+        region = FREIGHT_TABLE.get(uf, {"base": 45.0, "days": 6})
+        return {
+            "cep": digits,
+            "city": data.get("localidade", ""),
+            "uf": uf,
+            "neighborhood": data.get("bairro", ""),
+            "street": data.get("logradouro", ""),
+            "freight_base": region["base"],
+            "freight_days": region["days"],
+        }
+    except requests.RequestException:
+        raise HTTPException(502, "Serviço de CEP indisponível")
+
+
+@api.post("/projects")
+async def create_project(body: ProjectInput, authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    project = body.model_dump()
+    project.update({"project_id": "project_" + uuid.uuid4().hex[:12], "user_id": user["user_id"], "created_at": datetime.now(timezone.utc).isoformat()})
+    await db.projects.insert_one(dict(project))
+    return clean(project)
+
+
+@api.get("/projects")
+async def projects(authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    docs = await db.projects.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return [clean(d) for d in docs]
+
+
+@api.put("/projects/{project_id}")
+async def update_project(project_id: str, body: ProjectInput, authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    payload = body.model_dump()
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.projects.update_one({"user_id": user["user_id"], "project_id": project_id}, {"$set": payload})
+    if result.matched_count == 0:
+        raise HTTPException(404, "Projeto não encontrado")
+    doc = await db.projects.find_one({"user_id": user["user_id"], "project_id": project_id}, {"_id": 0})
+    return clean(dict(doc))
+
+
+@api.post("/estimate")
+async def estimate(body: ProjectInput, authorization: Optional[str] = Header(default=None)):
+    await current_user(authorization)
+    area = body.width * body.length
+    rooms = body.rooms or [Room(name="Ambiente principal", width=body.width, length=body.length)]
+    materials = [
+        {"name": "Cimento 50kg", "quantity": max(1, round(area * 0.35)), "unit": "sacos", "category": "Estrutura", "room": "Todos", "search": "cimento saco 50kg"},
+        {"name": "Areia média", "quantity": round(area * 0.045, 1), "unit": "m³", "category": "Estrutura", "room": "Todos", "search": "areia média construção"},
+        {"name": "Bloco cerâmico", "quantity": round(area * 16), "unit": "un", "category": "Alvenaria", "room": "Todos", "search": "bloco cerâmico 9x19x19"},
+        {"name": "Piso/ revestimento", "quantity": round(area * 1.1, 1), "unit": "m²", "category": "Acabamento", "room": "Todos", "search": "piso porcelanato 60x60"},
+        {"name": "Tinta acrílica", "quantity": max(1, round(area * 0.12)), "unit": "galões", "category": "Acabamento", "room": "Todos", "search": "tinta acrílica 3,6L"},
+    ]
+    return {"area": round(area, 1), "rooms": [r.model_dump() for r in rooms], "materials": materials, "estimated_total": round(area * 128.5, 2), "note": "Estimativa inicial. Confirme o projeto com um profissional responsável."}
+
+
+def _freight_for(uf: str, price: float) -> float:
+    """Rough freight heuristic: regional base + 3% of item value, capped."""
+    base = FREIGHT_TABLE.get(uf, {}).get("base", 45.0)
+    return round(min(base + price * 0.03, base + 120.0), 2)
+
+
+@api.get("/offers")
+async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
+    """Aggregate offers: Mercado Livre API results + deep-link search URLs for
+    Leroy Merlin and C&C (public search endpoints). Freight is estimated based on UF."""
+    query = re.sub(r"[^\w\s-]", "", q, flags=re.UNICODE)[:80] or "cimento"
+    ml_offers: List[Dict[str, Any]] = []
+    error: Optional[str] = None
+    try:
+        response = await asyncio.to_thread(requests.get, "https://api.mercadolibre.com/sites/MLB/search", params={"q": query, "limit": 10}, timeout=12)
+        response.raise_for_status()
+        results = response.json().get("results", [])
+        for x in results:
+            price = float(x.get("price") or 0)
+            ml_offers.append({
+                "id": x.get("id"),
+                "title": x.get("title"),
+                "price": price,
+                "currency": x.get("currency_id", "BRL"),
+                "thumbnail": x.get("thumbnail"),
+                "url": x.get("permalink"),
+                "store": "Mercado Livre",
+                "freight": _freight_for(uf.upper(), price) if uf else 0.0,
+                "freight_days": FREIGHT_TABLE.get(uf.upper(), {}).get("days") if uf else None,
+            })
+    except requests.RequestException:
+        error = "Não foi possível consultar o Mercado Livre agora"
+
+    encoded = quote_plus(query)
+    # Public search deep-links — we don't scrape, we surface the store's own search URL
+    # so the user always sees fresh, real prices on the store's site.
+    partner_stores = [
+        {
+            "id": f"leroy_{encoded}",
+            "title": f"Ver {q} no Leroy Merlin",
+            "price": None,
+            "store": "Leroy Merlin",
+            "url": f"https://www.leroymerlin.com.br/search?term={encoded}",
+            "thumbnail": None,
+            "type": "search",
+            "note": "Preços regionais atualizados no site oficial",
+        },
+        {
+            "id": f"cec_{encoded}",
+            "title": f"Ver {q} na C&C",
+            "price": None,
+            "store": "C&C Casa e Construção",
+            "url": f"https://www.cec.com.br/{encoded}?_query={encoded}",
+            "thumbnail": None,
+            "type": "search",
+            "note": "Buscar diretamente no site da C&C",
+        },
+        {
+            "id": f"telha_{encoded}",
+            "title": f"Ver {q} na Telhanorte",
+            "price": None,
+            "store": "Telhanorte",
+            "url": f"https://www.telhanorte.com.br/{encoded}?_q={encoded}",
+            "thumbnail": None,
+            "type": "search",
+            "note": "Buscar diretamente no site da Telhanorte",
+        },
+    ]
+    return {
+        "source": "Multi-loja",
+        "location": cep or "Brasil",
+        "uf": uf.upper() or None,
+        "offers": ml_offers,
+        "partner_stores": partner_stores,
+        "error": error,
+    }
+
+
+@api.get("/cart")
+async def cart_list(authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    docs = await db.cart_items.find({"user_id": user["user_id"]}, {"_id": 0, "user_id": 0}).sort("added_at", -1).to_list(100)
+    total_price = round(sum((d.get("price", 0) or 0) * (d.get("quantity", 1) or 1) for d in docs), 2)
+    total_freight = round(sum(d.get("freight", 0) or 0 for d in docs), 2)
+    stores = sorted({d.get("store", "") for d in docs if d.get("store")})
+    return {"items": docs, "total_price": total_price, "total_freight": total_freight, "grand_total": round(total_price + total_freight, 2), "stores": stores}
+
+
+@api.post("/cart")
+async def cart_add(body: CartItem, authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    doc = body.model_dump()
+    doc.update({"user_id": user["user_id"], "added_at": datetime.now(timezone.utc).isoformat()})
+    await db.cart_items.update_one({"user_id": user["user_id"], "offer_id": doc["offer_id"]}, {"$set": doc}, upsert=True)
+    return {"ok": True}
+
+
+@api.delete("/cart/{offer_id}")
+async def cart_remove(offer_id: str, authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    await db.cart_items.delete_one({"user_id": user["user_id"], "offer_id": offer_id})
+    return {"ok": True}
+
+
+@api.get("/alerts")
+async def alerts_list(authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    docs = await db.alerts.find({"user_id": user["user_id"]}, {"_id": 0, "user_id": 0}).sort("created_at", -1).to_list(50)
+    return docs
+
+
+@api.post("/alerts")
+async def alerts_create(body: AlertInput, authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    alert = {"alert_id": "alert_" + uuid.uuid4().hex[:10], "user_id": user["user_id"], "query": body.query, "target_price": body.target_price, "created_at": datetime.now(timezone.utc).isoformat(), "active": True}
+    await db.alerts.insert_one(dict(alert))
+    return clean(alert)
+
+
+@api.delete("/alerts/{alert_id}")
+async def alerts_remove(alert_id: str, authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    await db.alerts.delete_one({"user_id": user["user_id"], "alert_id": alert_id})
+    return {"ok": True}
+
+
+app.include_router(api)
+app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    client.close()
