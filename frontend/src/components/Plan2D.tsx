@@ -23,11 +23,13 @@ export function Plan2D({
   onNext,
   onSave,
   saving,
+  onView3D,
 }: {
   project: { name: string; build_type: string; width: number; length: number; rooms: Room[] };
   onNext: () => void;
   onSave: (rooms: Room[]) => void;
   saving?: boolean;
+  onView3D?: () => void;
 }) {
   const [containerW, setContainerW] = useState(340);
   const [rooms, setRooms] = useState<Room[]>(
@@ -63,6 +65,19 @@ export function Plan2D({
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Screen testID="plan2d-screen">
         <Header title="Planta 2D" subtitle={`${project.name} · ${project.width} × ${project.length} m`} />
+
+        {onView3D ? (
+          <Pressable testID="plan2d-view3d" onPress={onView3D} style={styles.view3dBar}>
+            <View style={styles.view3dIcon}>
+              <Icon name="cube-outline" size={18} color={colors.brand} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.view3dTitle}>Ver em 3D</Text>
+              <Text style={styles.view3dText}>Maquete interativa · gire, aproxime e explore</Text>
+            </View>
+            <Icon name="chevron-forward" size={18} color={colors.muted} />
+          </Pressable>
+        ) : null}
 
         <View style={styles.legend}>
           <View style={styles.legendItem}>
@@ -240,6 +255,10 @@ function DraggableRoom({
 }
 
 const styles = StyleSheet.create({
+  view3dBar: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.pale, padding: 12, borderRadius: 12, marginBottom: 14 },
+  view3dIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.white, alignItems: "center", justifyContent: "center" },
+  view3dTitle: { color: colors.brand, fontWeight: "700", fontSize: 14 },
+  view3dText: { color: colors.muted, fontSize: 11, marginTop: 2 },
   legend: { flexDirection: "row", gap: 18, marginBottom: 10 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendText: { color: colors.muted, fontSize: 11, fontWeight: "600" },

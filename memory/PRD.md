@@ -69,7 +69,22 @@ App mobile (Expo/React Native) para planejar obras/reformas com **planta 2D inte
   - Sacada/Varanda 0.70x, Garagem 0.65x, Corredor/Hall 0.55x, Jardim/Quintal 0.50x
 - **Editor de cômodos ampliado**: 20 tipos disponíveis com ícones — Sala, Cozinha, Quarto, Suíte, Closet, Banheiro, Lavabo, Área de serviço, **Conceito aberto**, **Área gourmet**, **Churrasqueira**, **Piscina**, Varanda, Sacada, Escritório, Corredor, Escada, Garagem, Jardim, Quintal.
 
-### Fase 6 (concluída nesta iteração)
+### Fase 7 (concluída nesta iteração)
+- **Maquete 3D interativa**: nova tela `View3D.tsx` gera Three.js em HTML on-the-fly a partir do projeto do usuário e renderiza em WebView (mobile) ou iframe (web). Cada cômodo vira um bloco 3D com material específico:
+  - **Piscina** → água azul rebaixada com opacidade
+  - **Churrasqueira** → paredes vermelho-tijolo + bancada
+  - **Área gourmet** → tons de madeira
+  - **Cozinha** → bancada bege + paredes claras
+  - **Banheiro/Lavabo** → cerâmica branca + vaso sanitário
+  - **Quarto/Suíte** → cama simples
+  - **Jardim/Garagem** → grama/asfalto sem paredes
+- **Câmera com OrbitControls**: arraste para girar, pinça para zoom, roda do mouse
+- **HUD com botões**: Girar (rotação automática), Telhado (mostrar/esconder), Etiquetas (mostrar/esconder), De cima (vista zenital)
+- **Iluminação**: hemisférica + sol direcional com sombras
+- **Tab bar escondida** no modo 3D para imersão completa
+- **Botão "Ver em 3D"** proeminente no topo da Planta 2D
+
+### Fase 6 (concluída anteriormente)
 - **Duplicar Projeto**: novo endpoint `POST /api/projects/{id}/duplicate` cria uma cópia com nome "{original} (cópia)" preservando cômodos, medidas e posições. Botão de duplicar (ícone `copy`) adicionado em cada card da tela Meus Projetos.
 
 ### Fase 5 (concluída anteriormente)

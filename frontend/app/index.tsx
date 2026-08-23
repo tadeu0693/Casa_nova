@@ -15,6 +15,7 @@ import { Cart } from "@/src/components/Cart";
 import { Templates } from "@/src/components/Templates";
 import { Alerts } from "@/src/components/Alerts";
 import { Projects } from "@/src/components/Projects";
+import { View3D } from "@/src/components/View3D";
 import { CepModal } from "@/src/components/CepModal";
 import type { CepData, Offer, Project, User } from "@/src/types";
 
@@ -23,7 +24,7 @@ const CEP_KEY = "constroi_facil_cep";
 export default function Index() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<"home" | "builder" | "plan" | "estimate" | "offers" | "cart" | "templates" | "alerts" | "projects">("home");
+  const [tab, setTab] = useState<"home" | "builder" | "plan" | "3d" | "estimate" | "offers" | "cart" | "templates" | "alerts" | "projects">("home");
   const [project, setProject] = useState<Project | null>(null);
   const [cep, setCep] = useState<CepData | null>(null);
   const [showCepModal, setShowCepModal] = useState(false);
@@ -140,8 +141,11 @@ export default function Index() {
         onNext={() => setTab("estimate")}
         onSave={savePlanLayout}
         saving={savingLayout}
+        onView3D={() => setTab("3d")}
       />
     );
+  } else if (tab === "3d" && project) {
+    content = <View3D project={project} onBack={() => setTab("plan")} />;
   } else if (tab === "estimate" && project) {
     content = (
       <Estimator
@@ -198,19 +202,21 @@ export default function Index() {
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       ) : null}
-      <View style={styles.tabbar}>
-        {[
-          ["home", "Início", "home-outline"],
-          ["builder", "Projetar", "create-outline"],
-          ["offers", "Ofertas", "pricetag-outline"],
-          ["cart", "Carrinho", "basket-outline"],
-        ].map(([key, label, icon]) => (
-          <Pressable key={key} testID={`tab-${key}`} onPress={() => setTab(key as any)} style={styles.tab}>
-            <Icon name={icon as any} size={22} color={tab === key ? colors.brand : colors.muted} />
-            <Text style={[styles.tabText, tab === key && styles.tabTextActive]}>{label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {tab === "3d" ? null : (
+        <View style={styles.tabbar}>
+          {[
+            ["home", "Início", "home-outline"],
+            ["builder", "Projetar", "create-outline"],
+            ["offers", "Ofertas", "pricetag-outline"],
+            ["cart", "Carrinho", "basket-outline"],
+          ].map(([key, label, icon]) => (
+            <Pressable key={key} testID={`tab-${key}`} onPress={() => setTab(key as any)} style={styles.tab}>
+              <Icon name={icon as any} size={22} color={tab === key ? colors.brand : colors.muted} />
+              <Text style={[styles.tabText, tab === key && styles.tabTextActive]}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
       <CepModal
         visible={showCepModal}
         onClose={() => setShowCepModal(false)}
