@@ -44,16 +44,16 @@ export function Home({ user, go, cep, onEditCep }: { user: User; go: (s: string)
       </View>
       <Text style={styles.sectionTitle}>Atalhos</Text>
       <View style={styles.tiles}>
-        <Action testID="home-tile-templates" icon="sparkles-outline" title="Modelos prontos" text="Kitnet, Casa, Edícula" onPress={() => go("templates")} />
+        <Action testID="home-tile-projects" icon="folder-outline" title="Meus projetos" text="Continuar editando" onPress={() => go("projects")} />
+        <Action testID="home-tile-templates" icon="sparkles-outline" title="Modelos prontos" text="Kitnet, Casa, Sobrado" onPress={() => go("templates")} />
+      </View>
+      <View style={[styles.tiles, { marginTop: 12 }]}>
         <Action testID="home-tile-plan" icon="grid-outline" title="Planta 2D" text="Desenhe seus cômodos" onPress={() => go("builder")} />
-      </View>
-      <View style={[styles.tiles, { marginTop: 12 }]}>
         <Action testID="home-tile-offers" icon="pricetag-outline" title="Ofertas" text="Compare por CEP" onPress={() => go("offers")} />
-        <Action testID="home-tile-cart" icon="basket-outline" title="Carrinho" text="Compare lojas" onPress={() => go("cart")} />
       </View>
       <View style={[styles.tiles, { marginTop: 12 }]}>
+        <Action testID="home-tile-cart" icon="basket-outline" title="Carrinho" text="Compare lojas" onPress={() => go("cart")} />
         <Action testID="home-tile-alerts" icon="notifications-outline" title="Alertas" text="Fique de olho no preço" onPress={() => go("alerts")} />
-        <View style={{ flex: 1 }} />
       </View>
       <Text style={styles.sectionTitle}>Como funciona</Text>
       <View style={styles.step}>

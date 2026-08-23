@@ -228,6 +228,15 @@ async def update_project(project_id: str, body: ProjectInput, authorization: Opt
     return clean(dict(doc))
 
 
+@api.delete("/projects/{project_id}")
+async def delete_project(project_id: str, authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    result = await db.projects.delete_one({"user_id": user["user_id"], "project_id": project_id})
+    if result.deleted_count == 0:
+        raise HTTPException(404, "Projeto não encontrado")
+    return {"ok": True}
+
+
 @api.post("/estimate")
 async def estimate(body: ProjectInput, authorization: Optional[str] = Header(default=None)):
     await current_user(authorization)

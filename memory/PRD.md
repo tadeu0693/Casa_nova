@@ -36,6 +36,7 @@ App mobile (Expo/React Native) para planejar obras/reformas com **planta 2D inte
 | POST | `/api/projects` | Criar projeto |
 | GET | `/api/projects` | Listar |
 | PUT | `/api/projects/{id}` | Atualizar layout |
+| DELETE | `/api/projects/{id}` | Excluir projeto |
 | POST | `/api/estimate` | Estimador (materiais + per_room) |
 | GET | `/api/templates` | Modelos prontos |
 | GET | `/api/offers?q&uf&cep` | Multi-loja + frete |
@@ -66,6 +67,9 @@ App mobile (Expo/React Native) para planejar obras/reformas com **planta 2D inte
   - Sala/Quarto (base) 1.0x, Conceito aberto/Integrado 0.95x
   - Sacada/Varanda 0.70x, Garagem 0.65x, Corredor/Hall 0.55x, Jardim/Quintal 0.50x
 - **Editor de cômodos ampliado**: 20 tipos disponíveis com ícones — Sala, Cozinha, Quarto, Suíte, Closet, Banheiro, Lavabo, Área de serviço, **Conceito aberto**, **Área gourmet**, **Churrasqueira**, **Piscina**, Varanda, Sacada, Escritório, Corredor, Escada, Garagem, Jardim, Quintal.
+
+### Fase 4 (concluída nesta iteração)
+- **Meus Projetos** (`Projects.tsx`): tela lista todos os projetos do usuário com ícone por tipo, área, nº ambientes e data de atualização. Ações: abrir (retoma no Plan2D), excluir (com modal de confirmação), criar novo, usar modelo pronto. Endpoint novo `DELETE /api/projects/{id}`.
 
 ## Backlog
 - Planta 3D interativa

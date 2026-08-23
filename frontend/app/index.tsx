@@ -14,6 +14,7 @@ import { Offers } from "@/src/components/Offers";
 import { Cart } from "@/src/components/Cart";
 import { Templates } from "@/src/components/Templates";
 import { Alerts } from "@/src/components/Alerts";
+import { Projects } from "@/src/components/Projects";
 import { CepModal } from "@/src/components/CepModal";
 import type { CepData, Offer, Project, User } from "@/src/types";
 
@@ -22,7 +23,7 @@ const CEP_KEY = "constroi_facil_cep";
 export default function Index() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<"home" | "builder" | "plan" | "estimate" | "offers" | "cart" | "templates" | "alerts">("home");
+  const [tab, setTab] = useState<"home" | "builder" | "plan" | "estimate" | "offers" | "cart" | "templates" | "alerts" | "projects">("home");
   const [project, setProject] = useState<Project | null>(null);
   const [cep, setCep] = useState<CepData | null>(null);
   const [showCepModal, setShowCepModal] = useState(false);
@@ -168,6 +169,15 @@ export default function Index() {
     );
   } else if (tab === "alerts") {
     content = <Alerts onBack={() => setTab("home")} onSeeOffers={openOffersFor} />;
+  } else if (tab === "projects") {
+    content = (
+      <Projects
+        onBack={() => setTab("home")}
+        onNew={() => { setProject(null); setTab("builder"); }}
+        onTemplates={() => setTab("templates")}
+        onOpen={(p) => { setProject(p); setTab("plan"); }}
+      />
+    );
   } else {
     content = (
       <Offers
