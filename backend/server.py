@@ -237,6 +237,22 @@ async def delete_project(project_id: str, authorization: Optional[str] = Header(
     return {"ok": True}
 
 
+@api.post("/projects/{project_id}/duplicate")
+async def duplicate_project(project_id: str, authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    original = await db.projects.find_one({"user_id": user["user_id"], "project_id": project_id}, {"_id": 0})
+    if not original:
+        raise HTTPException(404, "Projeto não encontrado")
+    copy = dict(original)
+    copy["project_id"] = "project_" + uuid.uuid4().hex[:12]
+    base_name = original.get("name", "Meu projeto")
+    copy["name"] = f"{base_name} (cópia)" if "(cópia" not in base_name else base_name
+    copy["created_at"] = datetime.now(timezone.utc).isoformat()
+    copy.pop("updated_at", None)
+    await db.projects.insert_one(dict(copy))
+    return clean(copy)
+
+
 @api.post("/estimate")
 async def estimate(body: ProjectInput, authorization: Optional[str] = Header(default=None)):
     await current_user(authorization)

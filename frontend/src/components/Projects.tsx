@@ -29,6 +29,7 @@ export function Projects({
   const [items, setItems] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<Project | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,6 +50,19 @@ export function Projects({
     await request(`/projects/${p.project_id}`, { method: "DELETE" }).catch(() => undefined);
     setPending(null);
     load();
+  };
+
+  const duplicate = async (p: Project) => {
+    if (!p.project_id) return;
+    setDuplicatingId(p.project_id);
+    try {
+      await request(`/projects/${p.project_id}/duplicate`, { method: "POST" });
+      await load();
+    } catch {
+      /* silent */
+    } finally {
+      setDuplicatingId(null);
+    }
   };
 
   return (
@@ -104,14 +118,29 @@ export function Projects({
                 </View>
                 <Icon name="chevron-forward" size={18} color={colors.muted} />
               </Pressable>
-              <Pressable
-                testID={`project-delete-${p.project_id}`}
-                onPress={() => setPending(p)}
-                style={styles.trashBtn}
-                hitSlop={8}
-              >
-                <Icon name="trash-outline" size={16} color={colors.error} />
-              </Pressable>
+              <View style={styles.cardActions}>
+                <Pressable
+                  testID={`project-duplicate-${p.project_id}`}
+                  onPress={() => duplicate(p)}
+                  style={styles.iconBtn}
+                  hitSlop={8}
+                  disabled={duplicatingId === p.project_id}
+                >
+                  <Icon
+                    name={duplicatingId === p.project_id ? "hourglass-outline" : "copy-outline"}
+                    size={16}
+                    color={colors.brand}
+                  />
+                </Pressable>
+                <Pressable
+                  testID={`project-delete-${p.project_id}`}
+                  onPress={() => setPending(p)}
+                  style={styles.iconBtn}
+                  hitSlop={8}
+                >
+                  <Icon name="trash-outline" size={16} color={colors.error} />
+                </Pressable>
+              </View>
             </View>
           );
         })
@@ -197,6 +226,8 @@ const styles = StyleSheet.create({
   cardTitle: { color: colors.ink, fontWeight: "700", fontSize: 15 },
   cardMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
   cardDate: { color: colors.muted, fontSize: 11, marginTop: 2, fontStyle: "italic" },
+  cardActions: { flexDirection: "row", gap: 4, paddingRight: 4 },
+  iconBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 8 },
   trashBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 8 },
   backdrop: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,.5)", padding: 24 },
   confirm: { backgroundColor: colors.bg, borderRadius: 16, padding: 24, width: "100%", maxWidth: 340 },

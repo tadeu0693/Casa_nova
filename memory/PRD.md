@@ -37,6 +37,7 @@ App mobile (Expo/React Native) para planejar obras/reformas com **planta 2D inte
 | GET | `/api/projects` | Listar |
 | PUT | `/api/projects/{id}` | Atualizar layout |
 | DELETE | `/api/projects/{id}` | Excluir projeto |
+| POST | `/api/projects/{id}/duplicate` | Duplicar projeto |
 | POST | `/api/estimate` | Estimador (materiais + per_room) |
 | GET | `/api/templates` | Modelos prontos |
 | GET | `/api/offers?q&uf&cep` | Multi-loja + frete |
@@ -68,7 +69,10 @@ App mobile (Expo/React Native) para planejar obras/reformas com **planta 2D inte
   - Sacada/Varanda 0.70x, Garagem 0.65x, Corredor/Hall 0.55x, Jardim/Quintal 0.50x
 - **Editor de cômodos ampliado**: 20 tipos disponíveis com ícones — Sala, Cozinha, Quarto, Suíte, Closet, Banheiro, Lavabo, Área de serviço, **Conceito aberto**, **Área gourmet**, **Churrasqueira**, **Piscina**, Varanda, Sacada, Escritório, Corredor, Escada, Garagem, Jardim, Quintal.
 
-### Fase 5 (concluída nesta iteração)
+### Fase 6 (concluída nesta iteração)
+- **Duplicar Projeto**: novo endpoint `POST /api/projects/{id}/duplicate` cria uma cópia com nome "{original} (cópia)" preservando cômodos, medidas e posições. Botão de duplicar (ícone `copy`) adicionado em cada card da tela Meus Projetos.
+
+### Fase 5 (concluída anteriormente)
 - **Preço estimado por loja**: quando o Mercado Livre está indisponível, cada card de loja parceira (Leroy Merlin, C&C, Telhanorte) agora mostra o preço estimado do material com base em tabela de referência nacional de 27 categorias comuns (cimento, areia, brita, blocos, porcelanato, tinta, telha, gesso, cal, argamassa, portas, janelas, torneiras, etc.). Faixa esperada (mín-máx) também exibida.
 - **Preço dinâmico quando ML funciona**: se o Mercado Livre responder, a mediana/mínimo/máximo é calculada em tempo real das ofertas retornadas, e as lojas parceiras herdam esse valor.
 - **User-Agent** adicionado à chamada do Mercado Livre para reduzir bloqueios 403.
