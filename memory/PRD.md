@@ -57,9 +57,15 @@ App mobile (Expo/React Native) para planejar obras/reformas com **planta 2D inte
 - Testing agent Iteration 5: PASS (frontend/backend)
 
 ### Fase 3 (concluída nesta iteração)
-- **Modelos Prontos** (`GET /api/templates`): 4 modelos com cômodos e posições pré-definidas — Kitnet 30m², Edícula 25m², Casa 60m² (2 quartos), Casa 90m² (3 quartos com suíte). Acessível pelo tile do Home e pelo CTA secundário do hero card.
+- **Modelos Prontos** (`GET /api/templates`): 8 modelos com cômodos e posições pré-definidas — Kitnet 30m², Edícula 25m², Casa 60m² (2 quartos), Casa 90m² (3 quartos com suíte), **Conceito Aberto 70m²**, **Casa 110m² com Piscina + Churrasqueira**, **Sobrado 120m²** (2 pavimentos), **Sobrado 180m²** (4 quartos com suítes). Acessível pelo tile do Home e pelo CTA secundário do hero card.
 - **Tela de Alertas** (`Alerts.tsx`): lista de materiais monitorados com preço-alvo, criação via bottom-sheet com sugestões rápidas, deep-link para Ofertas com a busca pré-preenchida.
-- **Custo por Cômodo**: `POST /api/estimate` agora inclui `per_room[{name, area, cost, cost_per_m2, share}]`. Multiplicador de custo por tipo (Banheiro/Cozinha/Suíte = 1.35x, Área de serviço = 1.15x, Varanda/Quintal = 0.75x). Toggle segmentado no Estimator entre "Lista Completa" e "Por Ambiente" com barras visuais.
+- **Custo por Cômodo**: `POST /api/estimate` agora inclui `per_room[{name, area, cost, cost_per_m2, share}]`. Multiplicadores refinados por tipo de cômodo:
+  - Piscina 2.0x (impermeabilização + azulejo + bomba)
+  - Banheiro/Lavabo 1.35x, Cozinha/Área gourmet/Churrasqueira 1.30x
+  - Área de serviço/Lavanderia 1.15x, Suíte 1.15x (separada de banheiro puro), Escada 1.10x, Closet 1.05x
+  - Sala/Quarto (base) 1.0x, Conceito aberto/Integrado 0.95x
+  - Sacada/Varanda 0.70x, Garagem 0.65x, Corredor/Hall 0.55x, Jardim/Quintal 0.50x
+- **Editor de cômodos ampliado**: 20 tipos disponíveis com ícones — Sala, Cozinha, Quarto, Suíte, Closet, Banheiro, Lavabo, Área de serviço, **Conceito aberto**, **Área gourmet**, **Churrasqueira**, **Piscina**, Varanda, Sacada, Escritório, Corredor, Escada, Garagem, Jardim, Quintal.
 
 ## Backlog
 - Planta 3D interativa

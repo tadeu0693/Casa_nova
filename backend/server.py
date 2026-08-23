@@ -241,16 +241,48 @@ async def estimate(body: ProjectInput, authorization: Optional[str] = Header(def
         {"name": "Tinta acrílica", "quantity": max(1, round(area * 0.12)), "unit": "galões", "category": "Acabamento", "room": "Todos", "search": "tinta acrílica 3,6L", "unit_cost": 155.0},
     ]
     total = round(area * 128.5, 2)
-    # Per-room cost: proportional to area with category-specific multipliers.
-    # Banheiro/cozinha: mais caros por m² (revestimento e hidráulica).
+    # Per-room cost: proportional to area × room-type multiplier.
+    # Higher = mais caro por m² (hidráulica, revestimento cerâmico, impermeabilização).
+    # Ordem importa (mais específico primeiro).
     def room_multiplier(name: str) -> float:
-        n = name.lower()
-        if "banh" in n or "cozin" in n or "suíte" in n or "suite" in n:
+        n = name.lower().strip()
+        # Piscina: impermeabilização + azulejo + bomba
+        if "piscina" in n:
+            return 2.0
+        # Banheiro / Lavabo: muito revestimento + hidráulica
+        if "banh" in n or "lavab" in n or "wc" in n:
             return 1.35
-        if "área" in n or "area" in n or "serviço" in n or "servico" in n:
+        # Cozinha / Área gourmet / Churrasqueira: hidráulica, exaustão, coifa
+        if "cozin" in n or "gourmet" in n or "churrasq" in n:
+            return 1.30
+        # Área de serviço / Lavanderia
+        if "serviço" in n or "servico" in n or "lavand" in n:
             return 1.15
-        if "varand" in n or "quintal" in n:
-            return 0.75
+        # Suíte: quarto + banheirinho pequeno (menos que banheiro puro)
+        if "suíte" in n or "suite" in n:
+            return 1.15
+        # Escada
+        if "escada" in n:
+            return 1.10
+        # Closet
+        if "closet" in n:
+            return 1.05
+        # Conceito aberto / integrado: economia estrutural (sem paredes)
+        if "conceito" in n or "integr" in n or "aberto" in n or "living" in n:
+            return 0.95
+        # Sacada / Varanda / Terraço
+        if "sacada" in n or "varand" in n or "terra" in n:
+            return 0.70
+        # Corredor / Hall
+        if "corredor" in n or "hall" in n or "circula" in n:
+            return 0.55
+        # Garagem / Vaga
+        if "garag" in n or "vaga" in n:
+            return 0.65
+        # Jardim / Quintal / Externo
+        if "jardim" in n or "quintal" in n or "extern" in n:
+            return 0.50
+        # Quarto / Sala / demais: base
         return 1.0
     # Normalize so weighted sum = total.
     weighted = [
@@ -346,6 +378,81 @@ async def templates():
                     {"name": "Quarto 3", "width": 3.0, "length": 3.5, "x": 3.0, "y": 8.5},
                     {"name": "Banheiro", "width": 2.0, "length": 2.0, "x": 5.5, "y": 4.5},
                     {"name": "Área serviço", "width": 2.5, "length": 2.5, "x": 7.5, "y": 4.5},
+                ],
+            },
+            {
+                "id": "conceito_aberto_70",
+                "name": "Conceito Aberto 70m²",
+                "description": "Sala, cozinha e jantar integrados + área gourmet, 1 quarto e banheiro. Poucas paredes, mais luz.",
+                "icon": "expand-outline",
+                "build_type": "Casa térrea",
+                "width": 8.5,
+                "length": 8.5,
+                "rooms": [
+                    {"name": "Conceito aberto", "width": 8.5, "length": 5.0, "x": 0, "y": 0},
+                    {"name": "Área gourmet", "width": 4.5, "length": 3.5, "x": 0, "y": 5.0},
+                    {"name": "Quarto", "width": 3.0, "length": 3.5, "x": 4.5, "y": 5.0},
+                    {"name": "Banheiro", "width": 2.0, "length": 2.0, "x": 7.5, "y": 5.0},
+                ],
+            },
+            {
+                "id": "casa_piscina_110",
+                "name": "Casa 110m² com Piscina",
+                "description": "Sala, cozinha, 2 quartos, banheiro, área gourmet com churrasqueira e piscina.",
+                "icon": "water-outline",
+                "build_type": "Casa térrea",
+                "width": 11.0,
+                "length": 10.0,
+                "rooms": [
+                    {"name": "Sala", "width": 5.0, "length": 4.5, "x": 0, "y": 0},
+                    {"name": "Cozinha", "width": 4.0, "length": 3.5, "x": 5.0, "y": 0},
+                    {"name": "Quarto 1", "width": 3.5, "length": 3.5, "x": 0, "y": 4.5},
+                    {"name": "Quarto 2", "width": 3.5, "length": 3.5, "x": 3.5, "y": 4.5},
+                    {"name": "Banheiro", "width": 2.0, "length": 2.0, "x": 7.0, "y": 4.5},
+                    {"name": "Área gourmet", "width": 4.0, "length": 3.0, "x": 0, "y": 8.0},
+                    {"name": "Churrasqueira", "width": 2.5, "length": 2.0, "x": 4.0, "y": 8.0},
+                    {"name": "Piscina", "width": 4.5, "length": 2.5, "x": 6.5, "y": 7.5},
+                ],
+            },
+            {
+                "id": "sobrado_120",
+                "name": "Sobrado 120m² · 2 pavimentos",
+                "description": "Térreo: sala, cozinha, lavabo, garagem. Superior: 3 quartos (suíte), 2 banheiros.",
+                "icon": "layers-outline",
+                "build_type": "Sobrado",
+                "width": 8.0,
+                "length": 8.0,
+                "rooms": [
+                    {"name": "Sala (térreo)", "width": 4.0, "length": 4.0, "x": 0, "y": 0},
+                    {"name": "Cozinha (térreo)", "width": 4.0, "length": 3.5, "x": 4.0, "y": 0},
+                    {"name": "Lavabo (térreo)", "width": 1.5, "length": 2.0, "x": 4.0, "y": 3.5},
+                    {"name": "Garagem", "width": 5.0, "length": 4.0, "x": 0, "y": 4.0},
+                    {"name": "Escada", "width": 1.5, "length": 3.0, "x": 5.5, "y": 4.5},
+                    {"name": "Suíte (superior)", "width": 4.0, "length": 4.0, "x": 0, "y": 4.0},
+                    {"name": "Quarto 2 (superior)", "width": 3.0, "length": 3.5, "x": 4.0, "y": 4.5},
+                    {"name": "Banheiro (superior)", "width": 2.0, "length": 2.0, "x": 6.0, "y": 6.0},
+                ],
+            },
+            {
+                "id": "sobrado_180",
+                "name": "Sobrado 180m² · 4 quartos",
+                "description": "Sobrado amplo com 2 suítes, sala 2 ambientes, cozinha gourmet, escritório e garagem.",
+                "icon": "business",
+                "build_type": "Sobrado",
+                "width": 10.0,
+                "length": 9.0,
+                "rooms": [
+                    {"name": "Sala 2 ambientes", "width": 6.0, "length": 4.5, "x": 0, "y": 0},
+                    {"name": "Cozinha gourmet", "width": 4.0, "length": 4.5, "x": 6.0, "y": 0},
+                    {"name": "Lavabo", "width": 1.5, "length": 2.0, "x": 0, "y": 4.5},
+                    {"name": "Garagem 2 vagas", "width": 5.0, "length": 4.5, "x": 5.0, "y": 4.5},
+                    {"name": "Escada", "width": 1.5, "length": 3.0, "x": 1.5, "y": 4.5},
+                    {"name": "Suíte master", "width": 4.5, "length": 4.0, "x": 0, "y": 5.0},
+                    {"name": "Closet", "width": 2.0, "length": 2.5, "x": 4.5, "y": 5.0},
+                    {"name": "Suíte 2", "width": 3.5, "length": 3.5, "x": 6.5, "y": 5.5},
+                    {"name": "Quarto 3", "width": 3.0, "length": 3.0, "x": 0, "y": 6.0},
+                    {"name": "Quarto 4", "width": 3.0, "length": 3.0, "x": 3.0, "y": 6.0},
+                    {"name": "Banheiro", "width": 2.0, "length": 2.0, "x": 6.0, "y": 7.0},
                 ],
             },
         ]

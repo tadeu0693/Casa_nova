@@ -5,15 +5,27 @@ import { Button, Chip, Field, Header, Icon, Screen } from "@/src/components/UI";
 import type { Room } from "@/src/types";
 
 const BUILD_TYPES = ["Casa térrea", "Sobrado", "Edícula", "Reforma"];
-const ROOM_TEMPLATES = [
-  { name: "Sala", width: 4, length: 5 },
-  { name: "Cozinha", width: 3, length: 4 },
-  { name: "Quarto", width: 3, length: 3.5 },
-  { name: "Banheiro", width: 2, length: 2 },
-  { name: "Suíte", width: 3.5, length: 4 },
-  { name: "Área de serviço", width: 2, length: 2.5 },
-  { name: "Varanda", width: 3, length: 2 },
-  { name: "Escritório", width: 3, length: 3 },
+const ROOM_TEMPLATES: { name: string; width: number; length: number; icon: keyof typeof import("@expo/vector-icons/build/Ionicons").Ionicons.glyphMap }[] = [
+  { name: "Sala", width: 4, length: 5, icon: "tv-outline" },
+  { name: "Cozinha", width: 3, length: 4, icon: "restaurant-outline" },
+  { name: "Quarto", width: 3, length: 3.5, icon: "bed-outline" },
+  { name: "Suíte", width: 3.5, length: 4, icon: "bed" },
+  { name: "Closet", width: 2, length: 2.5, icon: "shirt-outline" },
+  { name: "Banheiro", width: 2, length: 2, icon: "water-outline" },
+  { name: "Lavabo", width: 1.5, length: 2, icon: "water" },
+  { name: "Área de serviço", width: 2, length: 2.5, icon: "shirt-outline" },
+  { name: "Conceito aberto", width: 6, length: 5, icon: "expand-outline" },
+  { name: "Área gourmet", width: 4, length: 3, icon: "wine-outline" },
+  { name: "Churrasqueira", width: 2.5, length: 2, icon: "flame-outline" },
+  { name: "Piscina", width: 4, length: 2.5, icon: "water" },
+  { name: "Varanda", width: 3, length: 2, icon: "sunny-outline" },
+  { name: "Sacada", width: 3, length: 1.5, icon: "sunny-outline" },
+  { name: "Escritório", width: 3, length: 3, icon: "briefcase-outline" },
+  { name: "Corredor", width: 1, length: 3, icon: "swap-vertical-outline" },
+  { name: "Escada", width: 1.5, length: 3, icon: "trending-up-outline" },
+  { name: "Garagem", width: 3, length: 5, icon: "car-outline" },
+  { name: "Jardim", width: 3, length: 3, icon: "leaf-outline" },
+  { name: "Quintal", width: 4, length: 4, icon: "leaf" },
 ];
 
 export function Builder({
@@ -38,7 +50,7 @@ export function Builder({
 
   const addTemplate = (t: (typeof ROOM_TEMPLATES)[number]) => {
     const nextX = rooms.length ? (rooms[rooms.length - 1].x || 0) + (rooms[rooms.length - 1].width || 3) : 0;
-    setRooms([...rooms, { ...t, x: nextX, y: 0 }]);
+    setRooms([...rooms, { name: t.name, width: t.width, length: t.length, x: nextX, y: 0 }]);
   };
   const removeRoom = (idx: number) => setRooms(rooms.filter((_, i) => i !== idx));
   const updateRoom = (idx: number, key: keyof Room, val: string) => {
@@ -83,10 +95,11 @@ export function Builder({
       </View>
 
       <Text style={styles.formTitle}>Adicionar cômodo</Text>
+      <Text style={styles.body}>Escolha qualquer ambiente da lista — inclusive piscina, área gourmet, churrasqueira e conceito aberto.</Text>
       <View style={styles.chipRow}>
         {ROOM_TEMPLATES.map((t) => (
           <Pressable key={t.name} testID={`add-template-${t.name}`} onPress={() => addTemplate(t)} style={styles.addChip}>
-            <Icon name="add" size={14} color={colors.brand} />
+            <Icon name={t.icon} size={14} color={colors.brand} />
             <Text style={styles.addChipText}>{t.name}</Text>
           </Pressable>
         ))}
