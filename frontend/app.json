@@ -15,7 +15,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#C85A32"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.emergent.builddiscounthub.arjlf1"
@@ -39,6 +39,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "95620934-5664-483c-9bdd-5f79d51640f6"
+      }
     }
   }
 }
