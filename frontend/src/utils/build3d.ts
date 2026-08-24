@@ -60,8 +60,9 @@ export function build3DHtml(project: Project): string {
   #app{width:100vw;height:100vh;display:block;touch-action:none;}
   #hud{position:fixed;left:12px;right:12px;bottom:12px;background:rgba(255,255,255,.94);border-radius:14px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.08);display:flex;gap:6px;flex-wrap:wrap;justify-content:space-between;align-items:center;}
   #hud .kicker{font-size:11px;color:#706F6A;font-weight:700;letter-spacing:.8px;text-transform:uppercase;flex-basis:100%;margin-bottom:2px}
-  #hud button{background:#FCECE6;color:#C85A32;border:none;font-weight:700;font-size:12px;padding:8px 12px;border-radius:999px;cursor:pointer;flex:1;min-width:80px;}
+  #hud button{background:#FCECE6;color:#C85A32;border:none;font-weight:700;font-size:12px;padding:8px 12px;border-radius:999px;cursor:pointer;flex:1;min-width:70px;}
   #hud button.on{background:#C85A32;color:#fff}
+  #hud button.share{background:#1A1A1A;color:#fff}
   #tip{position:fixed;top:12px;left:12px;right:12px;background:rgba(26,26,26,.75);color:#fff;font-size:11px;padding:8px 12px;border-radius:10px;font-weight:600;text-align:center;pointer-events:none;transition:opacity .6s;}
 </style>
 </head><body>
@@ -73,6 +74,7 @@ export function build3DHtml(project: Project): string {
   <button id="btnRoof" class="on">Telhado</button>
   <button id="btnLabels" class="on">Etiquetas</button>
   <button id="btnTop">De cima</button>
+  <button id="btnShare" class="share">📤 Compartilhar</button>
 </div>
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
