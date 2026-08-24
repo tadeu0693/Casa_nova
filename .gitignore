@@ -83,6 +83,16 @@ android-sdk/
 .env
 .env.*
 *.env
+.env
+**/.env
+!frontend/.env
+node_modules/
+.venv/
+venv/
+.dist/
+dist/
+build/
+.DS_Store
 credentials.json
 *.key
 .credentials
