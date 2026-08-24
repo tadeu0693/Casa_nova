@@ -1,5 +1,5 @@
 export type User = { user_id: string; name: string; email: string };
-export type Room = { name: string; width: number; length: number; x?: number; y?: number };
+export type Room = { name: string; width: number; length: number; x?: number; y?: number; floor?: number };
 export type Project = {
   project_id?: string;
   name: string;

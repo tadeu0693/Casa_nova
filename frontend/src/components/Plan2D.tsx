@@ -37,9 +37,13 @@ export function Plan2D({
       ...r,
       x: r.x ?? i * (project.width / Math.max(project.rooms.length, 1)),
       y: r.y ?? 0,
+      floor: r.floor || 0,
     })),
   );
-  const [selected, setSelected] = useState<number>(0);
+  const floors = useMemo(() => Array.from(new Set(rooms.map((r) => r.floor || 0))).sort((a, b) => a - b), [rooms]);
+  const [activeFloor, setActiveFloor] = useState(floors[0] ?? 0);
+  const visibleIndices = useMemo(() => rooms.map((r, i) => i).filter((i) => (rooms[i].floor || 0) === activeFloor), [rooms, activeFloor]);
+  const [selected, setSelected] = useState<number>(visibleIndices[0] ?? 0);
 
   const scale = useMemo(() => {
     const availW = containerW - PADDING * 2;
@@ -49,6 +53,12 @@ export function Plan2D({
 
   const updateRoom = (idx: number, patch: Partial<Room>) => {
     setRooms((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  };
+
+  const selectFloor = (f: number) => {
+    setActiveFloor(f);
+    const firstOnFloor = rooms.findIndex((r) => (r.floor || 0) === f);
+    setSelected(firstOnFloor >= 0 ? firstOnFloor : 0);
   };
 
   const nudge = (idx: number, key: "width" | "length" | "x" | "y", delta: number) => {
@@ -67,7 +77,7 @@ export function Plan2D({
         <Header title="Planta 2D" subtitle={`${project.name} · ${project.width} × ${project.length} m`} />
 
         {onView3D ? (
-          <Pressable testID="plan2d-view3d" onPress={onView3D} style={styles.view3dBar}>
+          <Pressable testID="plan2d-view3d" onPress={() => { onSave(rooms); onView3D(); }} style={styles.view3dBar}>
             <View style={styles.view3dIcon}>
               <Icon name="cube-outline" size={18} color={colors.brand} />
             </View>
@@ -78,6 +88,16 @@ export function Plan2D({
             <Icon name="chevron-forward" size={18} color={colors.muted} />
           </Pressable>
         ) : null}
+
+        {floors.length > 1 && (
+          <View style={styles.floorTabs}>
+            {floors.map((f) => (
+              <Pressable key={f} testID={`plan2d-floor-${f}`} onPress={() => selectFloor(f)} style={[styles.floorTab, activeFloor === f && styles.floorTabActive]}>
+                <Text style={[styles.floorTabText, activeFloor === f && styles.floorTabTextActive]}>{f === 0 ? "Térreo" : `${f}º Andar`}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         <View style={styles.legend}>
           <View style={styles.legendItem}>
@@ -96,10 +116,10 @@ export function Plan2D({
           style={styles.canvas}
         >
           <Grid width={project.width} length={project.length} scale={scale} />
-          {rooms.map((r, i) => (
+          {visibleIndices.map((i) => (
             <DraggableRoom
-              key={`${r.name}-${i}`}
-              room={r}
+              key={`${rooms[i].name}-${i}`}
+              room={rooms[i]}
               index={i}
               scale={scale}
               maxWidth={project.width}
@@ -259,6 +279,11 @@ const styles = StyleSheet.create({
   view3dIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.white, alignItems: "center", justifyContent: "center" },
   view3dTitle: { color: colors.brand, fontWeight: "700", fontSize: 14 },
   view3dText: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  floorTabs: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  floorTab: { flex: 1, paddingVertical: 9, borderRadius: 10, backgroundColor: colors.card, alignItems: "center" },
+  floorTabActive: { backgroundColor: colors.brand },
+  floorTabText: { color: colors.muted, fontWeight: "700", fontSize: 12 },
+  floorTabTextActive: { color: colors.white },
   legend: { flexDirection: "row", gap: 18, marginBottom: 10 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendText: { color: colors.muted, fontSize: 11, fontWeight: "600" },

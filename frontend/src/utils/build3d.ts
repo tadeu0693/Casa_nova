@@ -3,9 +3,9 @@
 // piscina → water, churrasqueira → brick, área gourmet → wood, jardim → grass,
 // garagem → asphalt, etc. Runs inside a WebView.
 //
-// Design ideas borrowed from the user's reference chacara-3d file: MeshStandard
-// materials, OrbitControls, hemisphere + directional lighting, CanvasTexture
-// labels, and toggle-able roof / auto-rotate.
+// Rooms can belong to different floors (r.floor: 0 = térreo, 1 = 1º andar, ...),
+// so multi-story houses (sobrados) stack floors vertically instead of piling
+// every room onto a single ground plane.
 
 import type { Project, Room } from "@/src/types";
 
@@ -37,6 +37,7 @@ function serializeRooms(rooms: Room[]) {
     y: r.y ?? 0,
     w: r.width,
     l: r.length,
+    floor: r.floor || 0,
     style: styleFor(r.name),
   }));
 }
@@ -81,11 +82,19 @@ export function build3DHtml(project: Project): string {
 <script>
 (function(){
   const PROJECT = ${payload};
-  const WALL_H = 2.6, WALL_T = 0.12, ROOF_OVERHANG = 0.6, ROOF_H = 1.4;
+  const WALL_H = 2.6, WALL_T = 0.12, ROOF_OVERHANG = 0.6, ROOF_H = 1.4, SLAB_T = 0.15;
+  const FLOOR_H = WALL_H + SLAB_T; // vertical distance between one floor's base and the next
   const canvas = document.getElementById('app');
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xF8F7F4);
+
+  // Figure out which floors are actually used, and how tall the building is overall.
+  const floorSet = {};
+  PROJECT.rooms.forEach(function(r){ floorSet[r.floor || 0] = true; });
+  const floorKeys = Object.keys(floorSet).map(Number).sort(function(a,b){ return a - b; });
+  const topFloor = floorKeys.length ? floorKeys[floorKeys.length - 1] : 0;
+  const buildingHeight = topFloor * FLOOR_H + WALL_H + ROOF_H;
 
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 500);
   const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
@@ -96,18 +105,19 @@ export function build3DHtml(project: Project): string {
   // Center scene at (0,0)
   const cx = PROJECT.width / 2, cz = PROJECT.length / 2;
 
-  // Camera default (farther out so the whole house is framed)
-  const diag = Math.hypot(PROJECT.width, PROJECT.length);
-  camera.position.set(diag * 1.2, diag * 1.1, diag * 1.2);
-  camera.lookAt(0, 0, 0);
+  // Camera default (farther out so the whole house, including upper floors, is framed)
+  const diag = Math.hypot(PROJECT.width, PROJECT.length, buildingHeight);
+  const midY = buildingHeight / 2;
+  camera.position.set(diag * 1.1, diag * 0.9 + midY, diag * 1.1);
+  camera.lookAt(0, midY * 0.6, 0);
 
   const controls = new THREE.OrbitControls(camera, canvas);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.maxPolarAngle = Math.PI / 2 - 0.05;
-  controls.minDistance = diag * 0.35;
+  controls.minDistance = diag * 0.3;
   controls.maxDistance = diag * 2.5;
-  controls.target.set(0, 0, 0);
+  controls.target.set(0, midY * 0.6, 0);
 
   // Lights
   const hemi = new THREE.HemisphereLight(0xffffff, 0xE6DFCF, 0.7);
@@ -126,14 +136,6 @@ export function build3DHtml(project: Project): string {
   ground.position.y = -0.02;
   scene.add(ground);
 
-  // House terrain (slab under all rooms)
-  const slab = new THREE.Mesh(
-    new THREE.BoxGeometry(PROJECT.width, 0.15, PROJECT.length),
-    new THREE.MeshStandardMaterial({ color: 0xC7BFA9, roughness: 1 })
-  );
-  slab.position.set(0, -0.075, 0);
-  scene.add(slab);
-
   const roomGroup = new THREE.Group();
   const roofGroup = new THREE.Group();
   const labelGroup = new THREE.Group();
@@ -141,7 +143,7 @@ export function build3DHtml(project: Project): string {
   scene.add(roofGroup);
   scene.add(labelGroup);
 
-  function makeLabel(text) {
+  function makeLabel(text, roomMinDim) {
     const c = document.createElement('canvas');
     const ctx = c.getContext('2d');
     const pad = 10, fontSize = 34;
@@ -161,122 +163,201 @@ export function build3DHtml(project: Project): string {
     tex.anisotropy = 4;
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
     const sprite = new THREE.Sprite(mat);
-    // Scale relative to house diagonal so labels stay readable but not overwhelming
-    const scale = diag * 0.09;
+    // Scale relative to THIS room's own footprint (clamped) so labels for small
+    // rooms don't balloon to the size of the whole house and overlap neighbors.
+    const scale = Math.max(0.55, Math.min(roomMinDim * 0.45, diag * 0.09));
     sprite.scale.set(scale, scale * (c.height / c.width), 1);
     return sprite;
   }
 
-  function addWall(px, pz, w, h, d, mat) {
+  function addWall(px, baseY, pz, w, h, d, mat) {
     const geo = new THREE.BoxGeometry(w, h, d);
     const m = new THREE.Mesh(geo, mat);
-    m.position.set(px, h / 2, pz);
+    m.position.set(px, baseY + h / 2, pz);
     m.castShadow = true;
+    m.material.polygonOffset = true;
+    m.material.polygonOffsetFactor = 1;
+    m.material.polygonOffsetUnits = 1;
     return m;
   }
 
-  PROJECT.rooms.forEach(function(r){
-    // World coords: house top-left at (-cx, -cz)
-    const rx = -cx + r.x + r.w / 2;
-    const rz = -cz + r.y + r.l / 2;
-    const s = r.style;
+  function keyOf(v) { return Math.round(v * 100); }
+  function pushSeg(map, key, seg) {
+    const k = String(key);
+    if (!map[k]) map[k] = [];
+    map[k].push(seg);
+  }
 
-    // Floor
-    const floorMat = new THREE.MeshStandardMaterial({
-      color: s.floor.color,
-      roughness: s.floor.roughness == null ? 0.7 : s.floor.roughness,
-    });
-    if (s.kind === 'pool') {
-      // Sunken pool with water surface
-      const wall = new THREE.MeshStandardMaterial({ color: '#94b8c2', roughness: 0.5 });
-      const shell = new THREE.Mesh(new THREE.BoxGeometry(r.w, 0.5, r.l), wall);
-      shell.position.set(rx, -0.25, rz);
-      roomGroup.add(shell);
-      const water = new THREE.Mesh(
-        new THREE.PlaneGeometry(r.w * 0.96, r.l * 0.96),
-        new THREE.MeshStandardMaterial({ color: s.floor.color, roughness: 0.15, metalness: 0.2, transparent: true, opacity: 0.85 })
-      );
-      water.rotation.x = -Math.PI / 2;
-      water.position.set(rx, 0.05, rz);
-      roomGroup.add(water);
-    } else {
-      const floor = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.l), floorMat);
-      floor.rotation.x = -Math.PI / 2;
-      floor.position.set(rx, 0.005, rz);
-      floor.receiveShadow = true;
-      roomGroup.add(floor);
-    }
-
-    // Walls (skip walls for grass, deck, asphalt, pool)
-    const skipWalls = ['grass', 'asphalt', 'pool', 'deck'].indexOf(s.kind) !== -1;
-    if (!skipWalls) {
-      const wallMat = new THREE.MeshStandardMaterial({
-        color: s.wall.color,
-        transparent: s.wall.opacity != null && s.wall.opacity < 1,
-        opacity: s.wall.opacity == null ? 1 : s.wall.opacity,
-        roughness: 0.8,
+  // Build every physical wall exactly once per floor: merge touching/overlapping
+  // segments along each vertical (constant X) / horizontal (constant Z) line so
+  // two adjacent rooms share a single wall instead of two stacked, flickering ones.
+  function buildLines(map, orientation, baseY) {
+    Object.keys(map).forEach(function (k) {
+      const segs = map[k].slice().sort(function (a, b) {
+        const aStart = orientation === 'v' ? a.z1 : a.x1;
+        const bStart = orientation === 'v' ? b.z1 : b.x1;
+        return aStart - bStart;
       });
-      // 4 walls
-      roomGroup.add(addWall(rx, rz - r.l / 2, r.w + WALL_T, WALL_H, WALL_T, wallMat));
-      roomGroup.add(addWall(rx, rz + r.l / 2, r.w + WALL_T, WALL_H, WALL_T, wallMat));
-      roomGroup.add(addWall(rx - r.w / 2, rz, WALL_T, WALL_H, r.l, wallMat));
-      roomGroup.add(addWall(rx + r.w / 2, rz, WALL_T, WALL_H, r.l, wallMat));
+      const merged = [];
+      segs.forEach(function (seg) {
+        const start = orientation === 'v' ? seg.z1 : seg.x1;
+        const end = orientation === 'v' ? seg.z2 : seg.x2;
+        const last = merged[merged.length - 1];
+        if (last && start <= last.end + 0.03) {
+          last.end = Math.max(last.end, end);
+          if (seg.opacity > last.opacity) { last.color = seg.color; last.opacity = seg.opacity; }
+        } else {
+          merged.push({ start: start, end: end, color: seg.color, opacity: seg.opacity });
+        }
+      });
+      const coord = parseInt(k, 10) / 100;
+      merged.forEach(function (m) {
+        const length = orientation === 'v' ? (m.end - m.start) : (m.end - m.start) + WALL_T;
+        if (length <= 0.02) return;
+        const mid = (m.start + m.end) / 2;
+        const mat = new THREE.MeshStandardMaterial({
+          color: m.color,
+          transparent: m.opacity < 1,
+          opacity: m.opacity,
+          roughness: 0.8,
+        });
+        if (orientation === 'v') {
+          roomGroup.add(addWall(coord, baseY, mid, WALL_T, WALL_H, length, mat));
+        } else {
+          roomGroup.add(addWall(mid, baseY, coord, length, WALL_H, WALL_T, mat));
+        }
+      });
+    });
+  }
+
+  // Ground slab (térreo)
+  const groundSlab = new THREE.Mesh(
+    new THREE.BoxGeometry(PROJECT.width, SLAB_T, PROJECT.length),
+    new THREE.MeshStandardMaterial({ color: 0xC7BFA9, roughness: 1 })
+  );
+  groundSlab.position.set(0, -SLAB_T / 2, 0);
+  scene.add(groundSlab);
+
+  floorKeys.forEach(function(floorNum){
+    const baseY = floorNum * FLOOR_H;
+    const roomsOnFloor = PROJECT.rooms.filter(function(r){ return (r.floor || 0) === floorNum; });
+
+    // Every floor above the ground gets its own full slab (acts as the ceiling
+    // of the floor below / floor of the one above) — a real building trait.
+    if (floorNum > 0) {
+      const levelSlab = new THREE.Mesh(
+        new THREE.BoxGeometry(PROJECT.width, SLAB_T, PROJECT.length),
+        new THREE.MeshStandardMaterial({ color: 0xC7BFA9, roughness: 1 })
+      );
+      levelSlab.position.set(0, baseY - SLAB_T / 2, 0);
+      roomGroup.add(levelSlab);
     }
 
-    // Special props
-    if (s.kind === 'grill') {
-      const bench = new THREE.Mesh(
-        new THREE.BoxGeometry(r.w * 0.85, 0.9, 0.4),
-        new THREE.MeshStandardMaterial({ color: '#a94a2a', roughness: 0.9 })
-      );
-      bench.position.set(rx, 0.45, rz - r.l / 2 + 0.3);
-      roomGroup.add(bench);
-    }
-    if (s.kind === 'kitchen') {
-      const counter = new THREE.Mesh(
-        new THREE.BoxGeometry(r.w * 0.8, 0.9, 0.55),
-        new THREE.MeshStandardMaterial({ color: '#d8cbb3', roughness: 0.8 })
-      );
-      counter.position.set(rx, 0.45, rz - r.l / 2 + 0.4);
-      roomGroup.add(counter);
-    }
-    if (s.kind === 'bedroom') {
-      const bed = new THREE.Mesh(
-        new THREE.BoxGeometry(Math.min(r.w * 0.7, 1.8), 0.4, Math.min(r.l * 0.55, 2.0)),
-        new THREE.MeshStandardMaterial({ color: '#c9a986', roughness: 0.8 })
-      );
-      bed.position.set(rx, 0.22, rz);
-      roomGroup.add(bed);
-    }
-    if (s.kind === 'wet') {
-      const toilet = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.22, 0.22, 0.45, 12),
-        new THREE.MeshStandardMaterial({ color: '#f4f2ee' })
-      );
-      toilet.position.set(rx - r.w / 2 + 0.35, 0.22, rz - r.l / 2 + 0.35);
-      roomGroup.add(toilet);
-    }
+    const vLines = {}, hLines = {};
 
-    // Label
-    const lab = makeLabel(s.label);
-    lab.position.set(rx, WALL_H + ROOF_H + 0.9, rz);
-    labelGroup.add(lab);
+    roomsOnFloor.forEach(function(r){
+      // World coords: house top-left at (-cx, -cz)
+      const rx = -cx + r.x + r.w / 2;
+      const rz = -cz + r.y + r.l / 2;
+      const s = r.style;
+
+      // Floor
+      const floorMat = new THREE.MeshStandardMaterial({
+        color: s.floor.color,
+        roughness: s.floor.roughness == null ? 0.7 : s.floor.roughness,
+      });
+      if (s.kind === 'pool') {
+        // Sunken pool with water surface
+        const wall = new THREE.MeshStandardMaterial({ color: '#94b8c2', roughness: 0.5 });
+        const shell = new THREE.Mesh(new THREE.BoxGeometry(r.w, 0.5, r.l), wall);
+        shell.position.set(rx, baseY - 0.25, rz);
+        roomGroup.add(shell);
+        const water = new THREE.Mesh(
+          new THREE.PlaneGeometry(r.w * 0.96, r.l * 0.96),
+          new THREE.MeshStandardMaterial({ color: s.floor.color, roughness: 0.15, metalness: 0.2, transparent: true, opacity: 0.85 })
+        );
+        water.rotation.x = -Math.PI / 2;
+        water.position.set(rx, baseY + 0.05, rz);
+        roomGroup.add(water);
+      } else {
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.l), floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.set(rx, baseY + 0.005, rz);
+        floor.receiveShadow = true;
+        roomGroup.add(floor);
+      }
+
+      // Walls (skip walls for grass, deck, asphalt, pool) — only collected here,
+      // actually built after this floor's loop once shared borders are merged.
+      const skipWalls = ['grass', 'asphalt', 'pool', 'deck'].indexOf(s.kind) !== -1;
+      if (!skipWalls) {
+        const opacity = s.wall.opacity == null ? 1 : s.wall.opacity;
+        const seg = { color: s.wall.color, opacity: opacity };
+        pushSeg(vLines, keyOf(rx - r.w / 2), Object.assign({ z1: rz - r.l / 2, z2: rz + r.l / 2 }, seg));
+        pushSeg(vLines, keyOf(rx + r.w / 2), Object.assign({ z1: rz - r.l / 2, z2: rz + r.l / 2 }, seg));
+        pushSeg(hLines, keyOf(rz - r.l / 2), Object.assign({ x1: rx - r.w / 2, x2: rx + r.w / 2 }, seg));
+        pushSeg(hLines, keyOf(rz + r.l / 2), Object.assign({ x1: rx - r.w / 2, x2: rx + r.w / 2 }, seg));
+      }
+
+      // Special props
+      if (s.kind === 'grill') {
+        const bench = new THREE.Mesh(
+          new THREE.BoxGeometry(r.w * 0.85, 0.9, 0.4),
+          new THREE.MeshStandardMaterial({ color: '#a94a2a', roughness: 0.9 })
+        );
+        bench.position.set(rx, baseY + 0.45, rz - r.l / 2 + 0.3);
+        roomGroup.add(bench);
+      }
+      if (s.kind === 'kitchen') {
+        const counter = new THREE.Mesh(
+          new THREE.BoxGeometry(r.w * 0.8, 0.9, 0.55),
+          new THREE.MeshStandardMaterial({ color: '#d8cbb3', roughness: 0.8 })
+        );
+        counter.position.set(rx, baseY + 0.45, rz - r.l / 2 + 0.4);
+        roomGroup.add(counter);
+      }
+      if (s.kind === 'bedroom') {
+        const bed = new THREE.Mesh(
+          new THREE.BoxGeometry(Math.min(r.w * 0.7, 1.8), 0.4, Math.min(r.l * 0.55, 2.0)),
+          new THREE.MeshStandardMaterial({ color: '#c9a986', roughness: 0.8 })
+        );
+        bed.position.set(rx, baseY + 0.22, rz);
+        roomGroup.add(bed);
+      }
+      if (s.kind === 'wet') {
+        const toilet = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.22, 0.22, 0.45, 12),
+          new THREE.MeshStandardMaterial({ color: '#f4f2ee' })
+        );
+        toilet.position.set(rx - r.w / 2 + 0.35, baseY + 0.22, rz - r.l / 2 + 0.35);
+        roomGroup.add(toilet);
+      }
+
+      // Label
+      const lab = makeLabel(s.label, Math.min(r.w, r.l));
+      lab.position.set(rx, baseY + WALL_H + 0.55, rz);
+      labelGroup.add(lab);
+    });
+
+    buildLines(vLines, 'v', baseY);
+    buildLines(hLines, 'h', baseY);
   });
 
-  // Roof (single pyramid over house bounding box)
+  // Roof (single pyramid over the TOP floor only)
+  const topBaseY = topFloor * FLOOR_H;
   const roofMat = new THREE.MeshStandardMaterial({ color: '#8a3d1e', roughness: 0.7, side: THREE.DoubleSide });
   const roofBase = Math.max(PROJECT.width, PROJECT.length);
   const roofGeo = new THREE.ConeGeometry(roofBase * 0.72, ROOF_H, 4, 1);
   const roof = new THREE.Mesh(roofGeo, roofMat);
   roof.rotation.y = Math.PI / 4;
-  roof.position.set(0, WALL_H + ROOF_H / 2, 0);
+  roof.position.set(0, topBaseY + WALL_H + ROOF_H / 2, 0);
   roofGroup.add(roof);
   // Eave slab
   const eave = new THREE.Mesh(
     new THREE.BoxGeometry(PROJECT.width + ROOF_OVERHANG, 0.06, PROJECT.length + ROOF_OVERHANG),
     new THREE.MeshStandardMaterial({ color: '#7a3418', roughness: 0.9 })
   );
-  eave.position.set(0, WALL_H + 0.03, 0);
+  eave.position.set(0, topBaseY + WALL_H + 0.03, 0);
   roofGroup.add(eave);
 
   // Controls
@@ -296,7 +377,7 @@ export function build3DHtml(project: Project): string {
   });
   document.getElementById('btnTop').addEventListener('click', function(){
     camera.position.set(0, diag * 1.4, 0.01);
-    controls.target.set(0, 0, 0);
+    controls.target.set(0, midY * 0.6, 0);
     controls.update();
   });
 
