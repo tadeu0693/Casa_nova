@@ -33,6 +33,59 @@ const ROOM_TEMPLATES: { name: string; width: number; length: number; icon: keyof
   { name: "Quintal", width: 4, length: 4, icon: "leaf" },
 ];
 
+// Recognizes free-text room mentions ("2 quartos", "1 suíte", "sala", "cozinha e 2 banheiros")
+// and maps each to a ROOM_TEMPLATES entry, so the person can just describe the house in
+// plain Portuguese instead of tapping every chip by hand.
+const ROOM_KEYWORDS: { keywords: string[]; templateName: string }[] = [
+  { keywords: ["suíte", "suite"], templateName: "Suíte" },
+  { keywords: ["quarto", "dormitório", "dormitorio"], templateName: "Quarto" },
+  { keywords: ["banheiro", "wc"], templateName: "Banheiro" },
+  { keywords: ["lavabo"], templateName: "Lavabo" },
+  { keywords: ["cozinha"], templateName: "Cozinha" },
+  { keywords: ["conceito aberto", "ambiente integrado", "integrado"], templateName: "Conceito aberto" },
+  { keywords: ["sala de estar", "sala de jantar", "sala"], templateName: "Sala" },
+  { keywords: ["área gourmet", "area gourmet", "gourmet"], templateName: "Área gourmet" },
+  { keywords: ["churrasqueira", "churrasco"], templateName: "Churrasqueira" },
+  { keywords: ["piscina"], templateName: "Piscina" },
+  { keywords: ["varanda"], templateName: "Varanda" },
+  { keywords: ["sacada"], templateName: "Sacada" },
+  { keywords: ["escritório", "escritorio", "home office"], templateName: "Escritório" },
+  { keywords: ["closet"], templateName: "Closet" },
+  { keywords: ["área de serviço", "area de servico", "lavanderia"], templateName: "Área de serviço" },
+  { keywords: ["corredor", "hall"], templateName: "Corredor" },
+  { keywords: ["escada"], templateName: "Escada" },
+  { keywords: ["garagem", "vaga"], templateName: "Garagem" },
+  { keywords: ["quintal"], templateName: "Quintal" },
+  { keywords: ["jardim"], templateName: "Jardim" },
+];
+const NUMBER_WORDS: Record<string, number> = { um: 1, uma: 1, dois: 2, duas: 2, três: 3, tres: 3, quatro: 4, cinco: 5, seis: 6 };
+
+function parseHouseDescription(text: string): { name: string; width: number; length: number }[] {
+  const found: { name: string; width: number; length: number }[] = [];
+  // Split on commas, " e ", line breaks and " com " so "2 quartos, sala e cozinha" becomes 3 chunks.
+  const chunks = text
+    .toLowerCase()
+    .split(/,|\n|\bcom\b|\se\s/)
+    .map((c) => c.trim())
+    .filter(Boolean);
+
+  chunks.forEach((chunk) => {
+    const match = ROOM_KEYWORDS.find((k) => k.keywords.some((kw) => chunk.includes(kw)));
+    if (!match) return;
+    const template = ROOM_TEMPLATES.find((t) => t.name === match.templateName);
+    if (!template) return;
+    const numMatch = chunk.match(/\d+/);
+    let qty = numMatch ? parseInt(numMatch[0], 10) : 1;
+    if (!numMatch) {
+      const wordHit = Object.keys(NUMBER_WORDS).find((w) => chunk.includes(w));
+      if (wordHit) qty = NUMBER_WORDS[wordHit];
+    }
+    qty = Math.max(1, Math.min(qty, 10));
+    for (let i = 0; i < qty; i++) found.push({ name: template.name, width: template.width, length: template.length });
+  });
+  return found;
+}
+
 export function Builder({
   onDone,
   initial,
@@ -94,6 +147,37 @@ export function Builder({
     setRooms(next);
   };
 
+  const [description, setDescription] = useState("");
+  const generateFromDescription = () => {
+    const parsed = parseHouseDescription(description);
+    if (!parsed.length) return;
+    let updated = [...rooms];
+    parsed.forEach((t) => {
+      const buildingWidth = Number(width) || 8;
+      const sameFloorRooms = updated.filter((r) => (r.floor || 0) === selectedFloor);
+      let x = 0;
+      let y = 0;
+      if (sameFloorRooms.length) {
+        const last = sameFloorRooms[sameFloorRooms.length - 1];
+        const lastX = last.x || 0;
+        const lastY = last.y || 0;
+        const currentRow = sameFloorRooms.filter((r) => Math.abs((r.y || 0) - lastY) < 0.01);
+        const rowHeight = Math.max(...currentRow.map((r) => r.length || 0));
+        if (lastX + last.width + t.width <= buildingWidth + 0.001) {
+          x = lastX + last.width;
+          y = lastY;
+        } else {
+          x = 0;
+          y = lastY + rowHeight;
+        }
+      }
+      const room = { name: t.name, width: t.width, length: t.length, x, y, floor: selectedFloor };
+      updated = [...updated, room];
+    });
+    setRooms(updated);
+    setDescription("");
+  };
+
   return (
     <Screen testID="builder-screen">
       <Header title="Novo projeto" subtitle="Vamos desenhar sua ideia" />
@@ -128,13 +212,30 @@ export function Builder({
         </View>
       </View>
 
-      <Text style={styles.formTitle}>Andar</Text>
-      <Text style={styles.body}>Escolha em qual andar o próximo cômodo vai entrar — importante em sobrados, pra piscina/garagem ficarem no térreo e os quartos em cima.</Text>
+      <Text style={styles.formTitle}>Descreva sua casa (opcional)</Text>
+      <Text style={styles.body}>Escreva do seu jeito e a gente monta os cômodos pra você. Ex.: "2 quartos, sala, cozinha, banheiro e uma suíte"</Text>
+      <TextInput
+        testID="builder-description"
+        value={description}
+        onChangeText={setDescription}
+        placeholder="Ex.: 2 quartos, sala, cozinha e banheiro"
+        placeholderTextColor={colors.dim}
+        multiline
+        style={styles.descriptionInput}
+      />
+      <Button testID="builder-generate" title="Gerar cômodos automaticamente" onPress={generateFromDescription} disabled={!description.trim()} />
+
+      <Text style={[styles.formTitle, { marginTop: 26 }]}>Andar</Text>
+      <View style={styles.floorWarnBox}>
+        <Icon name="alert-circle-outline" size={16} color={colors.brand} />
+        <Text style={styles.floorWarnText}>Confira sempre este seletor antes de adicionar um cômodo — é ele que decide se o cômodo vai para o térreo ou para cima, essencial em sobrados.</Text>
+      </View>
       <View style={styles.chipRow}>
         {FLOORS.map((f) => (
           <Chip key={f.value} testID={`floor-${f.value}`} label={f.label} active={selectedFloor === f.value} onPress={() => setSelectedFloor(f.value)} />
         ))}
       </View>
+      <Text style={styles.floorActiveLabel}>Adicionando em: {FLOORS.find((f) => f.value === selectedFloor)?.label}</Text>
 
       <Text style={styles.formTitle}>Adicionar cômodo</Text>
       <Text style={styles.body}>Escolha qualquer ambiente da lista — inclusive piscina, área gourmet, churrasqueira e conceito aberto.</Text>
@@ -240,6 +341,10 @@ const styles = StyleSheet.create({
   addChipText: { color: colors.brand, fontWeight: "700", fontSize: 12 },
   roomCard: { backgroundColor: colors.white, borderRadius: 14, padding: 14, marginTop: 12, borderWidth: 1, borderColor: colors.line },
   floorGroupLabel: { color: colors.brand, fontWeight: "700", fontSize: 12, letterSpacing: 0.5, marginTop: 18, textTransform: "uppercase" },
+  descriptionInput: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 14, minHeight: 70, color: colors.ink, textAlignVertical: "top", marginBottom: 12 },
+  floorWarnBox: { flexDirection: "row", gap: 8, backgroundColor: colors.pale, borderRadius: 12, padding: 12, marginBottom: 10, alignItems: "flex-start" },
+  floorWarnText: { flex: 1, color: colors.brandDark, fontSize: 12, lineHeight: 17 },
+  floorActiveLabel: { color: colors.muted, fontSize: 12, marginTop: 8, fontStyle: "italic" },
   roomHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   roomName: { fontWeight: "700", fontSize: 15, color: colors.ink, flex: 1 },
   dimRow: { flexDirection: "row", gap: 8, marginTop: 12 },
