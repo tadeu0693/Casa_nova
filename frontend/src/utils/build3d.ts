@@ -15,6 +15,7 @@ type Material = { color: string; roughness?: number; metalness?: number; opacity
 function styleFor(name: string): { floor: Material; wall: Material; kind: string; label: string } {
   const n = name.toLowerCase();
   if (n.includes("piscina")) return { floor: { color: "#2b7ea1" }, wall: { color: "#94b8c2", opacity: 0.15 }, kind: "pool", label: name };
+  if ((n.includes("churrasq") || n.includes("gourmet")) && n.includes("externa")) return { floor: { color: "#c9b48a", roughness: 0.85 }, wall: { color: "#c9b48a", opacity: 0.1 }, kind: "outdoor", label: name };
   if (n.includes("churrasq")) return { floor: { color: "#7a3d2a", roughness: 0.9 }, wall: { color: "#c85a32" }, kind: "grill", label: name };
   if (n.includes("gourmet")) return { floor: { color: "#c8a76a", roughness: 0.8 }, wall: { color: "#d8b47c" }, kind: "wood", label: name };
   if (n.includes("varand") || n.includes("sacada") || n.includes("terra")) return { floor: { color: "#b39471" }, wall: { color: "#b39471", opacity: 0.3 }, kind: "deck", label: name };
@@ -108,8 +109,9 @@ export function build3DHtml(project: Project): string {
   // Roof pitch scales with the TOP floor's own footprint (not the whole lot),
   // and is capped to a sane pitch so a large building doesn't get a giant flat diamond.
   // Only ROOFED (enclosed, walled) rooms belong under the pitched roof — a pool, lawn,
-  // open driveway or balcony is outdoor by nature and must sit outside the roof's footprint.
-  const OUTDOOR_KINDS = ['grass', 'asphalt', 'pool', 'deck'];
+  // open driveway, balcony or an EXTERNAL grill/gourmet area is outdoor by nature and
+  // must sit outside the roof's footprint.
+  const OUTDOOR_KINDS = ['grass', 'asphalt', 'pool', 'deck', 'outdoor'];
   const topFloorRooms = PROJECT.rooms.filter(function(r){ return (r.floor || 0) === topFloor && OUTDOOR_KINDS.indexOf(r.style.kind) === -1; });
   function bboxOf(rooms){
     if (!rooms.length) return { w: PROJECT.width, l: PROJECT.length };
@@ -317,7 +319,7 @@ export function build3DHtml(project: Project): string {
         group.add(floor);
       }
 
-      const skipWalls = ['grass', 'asphalt', 'pool', 'deck'].indexOf(s.kind) !== -1;
+      const skipWalls = ['grass', 'asphalt', 'pool', 'deck', 'outdoor'].indexOf(s.kind) !== -1;
       if (!skipWalls) {
         const opacity = s.wall.opacity == null ? 1 : s.wall.opacity;
         const seg = { color: s.wall.color, opacity: opacity };
@@ -327,10 +329,35 @@ export function build3DHtml(project: Project): string {
         pushSeg(hLines, keyOf(rz + r.l / 2), Object.assign({ x1: rx - r.w / 2, x2: rx + r.w / 2 }, seg));
       }
 
-      if (s.kind === 'grill') {
+      if (s.kind === 'grill' || s.kind === 'outdoor') {
         const bench = new THREE.Mesh(new THREE.BoxGeometry(r.w * 0.85, 0.9, 0.4), new THREE.MeshStandardMaterial({ color: '#a94a2a', roughness: 0.9 }));
         bench.position.set(rx, baseY + 0.45, rz - r.l / 2 + 0.3);
         group.add(bench);
+      }
+      if (s.kind === 'outdoor') {
+        // Its own small pergola (posts + a flat cover), independent of the house's main
+        // roof — keeps an EXTERNAL grill/gourmet area protected from rain/sun without
+        // pretending it's an indoor room with walls.
+        const PERGOLA_H = 2.3;
+        const postMat = new THREE.MeshStandardMaterial({ color: '#8a6a4a', roughness: 0.85 });
+        [
+          [rx - r.w / 2 + 0.18, rz - r.l / 2 + 0.18],
+          [rx + r.w / 2 - 0.18, rz - r.l / 2 + 0.18],
+          [rx - r.w / 2 + 0.18, rz + r.l / 2 - 0.18],
+          [rx + r.w / 2 - 0.18, rz + r.l / 2 - 0.18],
+        ].forEach(function(c){
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, PERGOLA_H, 8), postMat);
+          post.position.set(c[0], baseY + PERGOLA_H / 2, c[1]);
+          post.castShadow = true;
+          group.add(post);
+        });
+        const pergolaRoof = new THREE.Mesh(
+          new THREE.BoxGeometry(r.w + 0.3, 0.08, r.l + 0.3),
+          new THREE.MeshStandardMaterial({ color: '#7a3418', roughness: 0.85 })
+        );
+        pergolaRoof.position.set(rx, baseY + PERGOLA_H, rz);
+        pergolaRoof.castShadow = true;
+        group.add(pergolaRoof);
       }
       if (s.kind === 'kitchen' || s.kind === 'openconcept') {
         const counter = new THREE.Mesh(
@@ -366,19 +393,49 @@ export function build3DHtml(project: Project): string {
     buildLines(hLines, 'h', baseY, group);
   });
 
-  // Roof (pitched, sized to the TOP floor's own footprint — not the whole lot —
-  // and height-capped so large buildings don't get a giant flat diamond).
+  // Roof: a real hip roof (four sloped faces meeting at a ridge line), sized tightly
+  // to the TOP floor's indoor footprint rectangle plus a small eave overhang — NOT a
+  // circular cone. A cone-based "pyramid" always overshoots a rectangle's corners by
+  // ~40%, which is exactly why it kept covering the pool/deck next to the house even
+  // after they were excluded from the size calculation. A rectangular hip roof has no
+  // such overshoot: it only extends past the walls by the small overhang margin.
+  function buildHipRoofGeometry(halfW, halfL, apexHeight) {
+    const v = [];
+    function tri(p1, p2, p3) { v.push(p1[0], p1[1], p1[2], p2[0], p2[1], p2[2], p3[0], p3[1], p3[2]); }
+    const A = [-halfW, 0, -halfL], B = [halfW, 0, -halfL], C = [halfW, 0, halfL], D = [-halfW, 0, halfL];
+    if (halfW <= halfL) {
+      const ridgeHalf = Math.max(0, halfL - halfW);
+      const R1 = [0, apexHeight, -ridgeHalf], R2 = [0, apexHeight, ridgeHalf];
+      tri(A, D, R2); tri(A, R2, R1);       // slope facing -X
+      tri(B, R1, R2); tri(B, R2, C);       // slope facing +X
+      tri(A, B, R1);                        // hip end facing -Z
+      tri(D, R2, C);                        // hip end facing +Z
+    } else {
+      const ridgeHalf = Math.max(0, halfW - halfL);
+      const R1 = [-ridgeHalf, apexHeight, 0], R2 = [ridgeHalf, apexHeight, 0];
+      tri(A, B, R2); tri(A, R2, R1);       // slope facing -Z
+      tri(D, R1, R2); tri(D, R2, C);       // slope facing +Z
+      tri(A, R1, D);                        // hip end facing -X
+      tri(B, C, R2);                        // hip end facing +X
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
   const topBaseY = topFloor * FLOOR_H;
   const roofMat = new THREE.MeshStandardMaterial({ color: '#8a3d1e', roughness: 0.7, side: THREE.DoubleSide });
-  const roofRadius = (roofSpan / 2) * 1.28; // small eave overhang beyond the footprint diagonal
-  const roofGeo = new THREE.ConeGeometry(roofRadius, ROOF_H, 4, 1);
+  const OVERHANG = 0.4; // small eave overhang past the walls, like a real roof
+  const roofHalfW = roofFootprint.w / 2 + OVERHANG;
+  const roofHalfL = roofFootprint.l / 2 + OVERHANG;
+  const roofGeo = buildHipRoofGeometry(roofHalfW, roofHalfL, ROOF_H);
   const roof = new THREE.Mesh(roofGeo, roofMat);
-  roof.rotation.y = Math.PI / 4;
   roof.castShadow = true;
-  roof.position.set(roofFootprint.cx != null ? -cx + roofFootprint.cx : 0, topBaseY + WALL_H + ROOF_H / 2, roofFootprint.cz != null ? -cz + roofFootprint.cz : 0);
+  roof.position.set(roofFootprint.cx != null ? -cx + roofFootprint.cx : 0, topBaseY + WALL_H, roofFootprint.cz != null ? -cz + roofFootprint.cz : 0);
   roofGroup.add(roof);
   const eave = new THREE.Mesh(
-    new THREE.BoxGeometry(roofFootprint.w + 0.6, 0.06, roofFootprint.l + 0.6),
+    new THREE.BoxGeometry(roofFootprint.w + OVERHANG * 2, 0.06, roofFootprint.l + OVERHANG * 2),
     new THREE.MeshStandardMaterial({ color: '#7a3418', roughness: 0.9 })
   );
   eave.position.set(roof.position.x, topBaseY + WALL_H + 0.03, roof.position.z);
