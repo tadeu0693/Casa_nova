@@ -5,7 +5,7 @@ import { colors } from "@/src/theme";
 import { Chip, Header, Icon, Screen } from "@/src/components/UI";
 import type { CepData, Offer } from "@/src/types";
 
-const QUICK_QUERIES = ["Cimento", "Areia", "Bloco cerâmico", "Piso", "Tinta", "Telha"];
+const QUICK_QUERIES = ["Cimento 50kg", "Areia média construção", "Bloco cerâmico", "Piso porcelanato", "Tinta acrílica", "Telha cerâmica"];
 const SORTS = ["Melhor preço", "Menor frete", "Total (preço+frete)"];
 
 export function Offers({
