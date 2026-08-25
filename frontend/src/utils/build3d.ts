@@ -20,10 +20,11 @@ function styleFor(name: string): { floor: Material; wall: Material; kind: string
   if (n.includes("jardim") || n.includes("quintal")) return { floor: { color: "#6ba368", roughness: 1 }, wall: { color: "#6ba368", opacity: 0.05 }, kind: "grass", label: name };
   if (n.includes("garag")) return { floor: { color: "#4a4a4a", roughness: 1 }, wall: { color: "#8a8a8a", opacity: 0.4 }, kind: "asphalt", label: name };
   if (n.includes("banh") || n.includes("lavab")) return { floor: { color: "#e5eef3" }, wall: { color: "#f6f4ee", opacity: 0.85 }, kind: "wet", label: name };
+  if (n.includes("conceito") || n.includes("integr")) return { floor: { color: "#e6d7b8" }, wall: { color: "#f6f4ee", opacity: 0.85 }, kind: "openconcept", label: name };
   if (n.includes("cozin")) return { floor: { color: "#efe6d7" }, wall: { color: "#f6f4ee", opacity: 0.85 }, kind: "kitchen", label: name };
   if (n.includes("suíte") || n.includes("suite")) return { floor: { color: "#efdcd0" }, wall: { color: "#f6f4ee", opacity: 0.85 }, kind: "bedroom", label: name };
   if (n.includes("quarto")) return { floor: { color: "#e8dcc9" }, wall: { color: "#f6f4ee", opacity: 0.85 }, kind: "bedroom", label: name };
-  if (n.includes("sala") || n.includes("conceito") || n.includes("aberto") || n.includes("integr")) return { floor: { color: "#e6d7b8" }, wall: { color: "#f6f4ee", opacity: 0.85 }, kind: "living", label: name };
+  if (n.includes("sala") || n.includes("aberto")) return { floor: { color: "#e6d7b8" }, wall: { color: "#f6f4ee", opacity: 0.85 }, kind: "living", label: name };
   if (n.includes("corredor") || n.includes("hall") || n.includes("escada")) return { floor: { color: "#d8ccb6" }, wall: { color: "#f6f4ee", opacity: 0.85 }, kind: "hall", label: name };
   if (n.includes("closet")) return { floor: { color: "#e0cdb3" }, wall: { color: "#f6f4ee", opacity: 0.85 }, kind: "closet", label: name };
   return { floor: { color: "#efe6d7" }, wall: { color: "#f6f4ee", opacity: 0.85 }, kind: "room", label: name };
@@ -308,13 +309,22 @@ export function build3DHtml(project: Project): string {
         bench.position.set(rx, baseY + 0.45, rz - r.l / 2 + 0.3);
         roomGroup.add(bench);
       }
-      if (s.kind === 'kitchen') {
+      if (s.kind === 'kitchen' || s.kind === 'openconcept') {
         const counter = new THREE.Mesh(
-          new THREE.BoxGeometry(r.w * 0.8, 0.9, 0.55),
+          new THREE.BoxGeometry(r.w * (s.kind === 'openconcept' ? 0.42 : 0.8), 0.9, 0.55),
           new THREE.MeshStandardMaterial({ color: '#d8cbb3', roughness: 0.8 })
         );
-        counter.position.set(rx, baseY + 0.45, rz - r.l / 2 + 0.4);
+        counter.position.set(rx - (s.kind === 'openconcept' ? r.w * 0.22 : 0), baseY + 0.45, rz - r.l / 2 + 0.4);
         roomGroup.add(counter);
+      }
+      if (s.kind === 'openconcept') {
+        // Living-area sofa on the opposite side, since this room merges kitchen + living with no dividing wall.
+        const sofa = new THREE.Mesh(
+          new THREE.BoxGeometry(Math.min(r.w * 0.4, 2.2), 0.5, 0.8),
+          new THREE.MeshStandardMaterial({ color: '#8a6f5a', roughness: 0.85 })
+        );
+        sofa.position.set(rx + r.w * 0.2, baseY + 0.25, rz + r.l / 2 - 0.6);
+        roomGroup.add(sofa);
       }
       if (s.kind === 'bedroom') {
         const bed = new THREE.Mesh(
