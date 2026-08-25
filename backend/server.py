@@ -62,6 +62,7 @@ class Room(BaseModel):
     length: float = Field(gt=0)
     x: float = 0
     y: float = 0
+    floor: int = 0
 
 
 class ProjectInput(BaseModel):
@@ -269,7 +270,13 @@ async def estimate(body: ProjectInput, authorization: Optional[str] = Header(def
         {"name": "Piso/ revestimento", "quantity": round(area * 1.1, 1), "unit": "m²", "category": "Acabamento", "room": "Todos", "search": "piso porcelanato 60x60", "unit_cost": 65.0},
         {"name": "Tinta acrílica", "quantity": max(1, round(area * 0.12)), "unit": "galões", "category": "Acabamento", "room": "Todos", "search": "tinta acrílica 3,6L", "unit_cost": 155.0},
     ]
-    total = round(area * 128.5, 2)
+    # CUB (Custo Unitário Básico) médio nacional, padrão médio residencial, ~2026: a
+    # faixa real fica entre R$1.800/m² (padrão baixo) e R$4.500/m² (alto padrão),
+    # publicada mensalmente pelos Sinduscons estaduais. Usamos R$1.900/m² como base
+    # de padrão médio — ainda assim é uma REFERÊNCIA, não um orçamento fechado (não
+    # inclui terreno, projeto, taxas, mão de obra especializada fora da média, etc.,
+    # igual o próprio CUB oficial também não inclui).
+    total = round(area * 1900.0, 2)
     # Per-room cost: proportional to area × room-type multiplier.
     # Higher = mais caro por m² (hidráulica, revestimento cerâmico, impermeabilização).
     # Ordem importa (mais específico primeiro).
