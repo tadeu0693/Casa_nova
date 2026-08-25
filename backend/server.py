@@ -490,6 +490,45 @@ def _freight_for(uf: str, price: float) -> float:
     return round(min(base + price * 0.03, base + 120.0), 2)
 
 
+async def _fetch_leroy_price(query: str, ua_headers: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    """Best-effort real price from Leroy Merlin's own catalog search endpoint (the
+    platform they run on — VTEX — exposes this for the storefront's own search-as-you-type).
+    This is NOT an official partner API: it's the same public endpoint the site's own
+    frontend calls, so it can change or start blocking without notice. If it fails for
+    any reason we simply return None and the caller falls back to the reference estimate —
+    nothing breaks.
+    """
+    try:
+        response = await asyncio.to_thread(
+            requests.get,
+            f"https://www.leroymerlin.com.br/api/catalog_system/pub/products/search/{quote_plus(query)}",
+            params={"map": "ft"},
+            headers=ua_headers,
+            timeout=5,
+        )
+        response.raise_for_status()
+        products = response.json()
+        if not isinstance(products, list) or not products:
+            return None
+        for product in products[:5]:
+            items = product.get("items") or []
+            for item in items:
+                sellers = item.get("sellers") or []
+                for seller in sellers:
+                    offer = seller.get("commertialOffer") or {}
+                    price = offer.get("Price")
+                    if price and price > 0:
+                        link_text = product.get("linkText")
+                        return {
+                            "price": round(float(price), 2),
+                            "title": product.get("productName") or query,
+                            "url": f"https://www.leroymerlin.com.br/{link_text}/p" if link_text else None,
+                        }
+        return None
+    except Exception:
+        return None
+
+
 @api.get("/offers")
 async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
     """Aggregate offers: Mercado Livre API results + deep-link search URLs for
@@ -528,6 +567,10 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
     except requests.RequestException:
         error = "Não foi possível consultar o Mercado Livre agora"
 
+    # Best-effort real price straight from Leroy Merlin's own catalog (see docstring above
+    # for why this is "best effort" rather than a guaranteed official integration).
+    leroy_real = await _fetch_leroy_price(query, ua_headers)
+
     # Reference median price per unit (BRL) — Brazilian construction market averages 2025.
     # Used to give the user a "typical range" when the marketplace API is unavailable
     # or as a benchmark to know whether a partner-store price is fair.
@@ -539,14 +582,15 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
     partner_stores = [
         {
             "id": f"leroy_{encoded}",
-            "title": f"{q} no Leroy Merlin",
+            "title": leroy_real["title"] if leroy_real else f"{q} no Leroy Merlin",
             "price_range": ref["range"],
-            "estimated_price": ref["median"],
+            "estimated_price": leroy_real["price"] if leroy_real else ref["median"],
             "store": "Leroy Merlin",
-            "url": f"https://www.leroymerlin.com.br/search?term={encoded}",
+            "url": leroy_real["url"] if (leroy_real and leroy_real.get("url")) else f"https://www.leroymerlin.com.br/search?term={encoded}",
             "thumbnail": None,
             "type": "search",
-            "note": ref["note"],
+            "note": "Preço real do site (agora)" if leroy_real else ref["note"],
+            "real_price": bool(leroy_real),
         },
         {
             "id": f"cec_{encoded}",

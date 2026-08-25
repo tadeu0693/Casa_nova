@@ -21,6 +21,9 @@ export type Offer = {
   freight_days?: number | null;
   type?: string;
   note?: string;
+  estimated_price?: number | null;
+  price_range?: string;
+  real_price?: boolean;
 };
 export type CepData = {
   cep: string;

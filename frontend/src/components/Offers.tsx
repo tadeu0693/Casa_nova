@@ -205,7 +205,7 @@ export function Offers({
                   </View>
                   {p.estimated_price ? (
                     <View style={{ alignItems: "flex-end" }}>
-                      <Text style={styles.partnerEstLabel}>ESTIMADO</Text>
+                      <Text style={[styles.partnerEstLabel, p.real_price && { color: colors.green }]}>{p.real_price ? "REAL AGORA" : "ESTIMADO"}</Text>
                       <Text style={styles.partnerEstPrice}>R$ {p.estimated_price.toFixed(2)}</Text>
                     </View>
                   ) : (
