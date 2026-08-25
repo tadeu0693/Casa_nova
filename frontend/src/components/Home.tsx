@@ -1,10 +1,16 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors } from "@/src/theme";
 import { Icon, Screen } from "@/src/components/UI";
 import type { CepData, User } from "@/src/types";
 
-export function Home({ user, go, cep, onEditCep }: { user: User; go: (s: string) => void; cep: CepData | null; onEditCep: () => void }) {
+export function Home({ user, go, cep, onEditCep, onLogout }: { user: User; go: (s: string) => void; cep: CepData | null; onEditCep: () => void; onLogout: () => void }) {
   const firstName = (user.name || "").split(" ")[0] || "amigo";
+  const confirmLogout = () => {
+    Alert.alert("Sair da conta", "Tem certeza que quer sair? Você vai precisar entrar de novo com e-mail e senha (ou Google).", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Sair", style: "destructive", onPress: onLogout },
+    ]);
+  };
   return (
     <Screen testID="home-screen">
       <View style={styles.top}>
@@ -12,9 +18,9 @@ export function Home({ user, go, cep, onEditCep }: { user: User; go: (s: string)
           <Text style={styles.eyebrow}>OLÁ, {firstName.toUpperCase()}</Text>
           <Text style={styles.title}>O que vamos construir?</Text>
         </View>
-        <View style={styles.avatar}>
+        <Pressable testID="home-avatar" onPress={confirmLogout} style={styles.avatar}>
           <Text style={styles.avatarText}>{(user.name || "?")[0]?.toUpperCase()}</Text>
-        </View>
+        </Pressable>
       </View>
       <Pressable testID="home-cep" style={styles.location} onPress={onEditCep}>
         <Icon name="location-outline" size={18} color={colors.brand} />

@@ -45,6 +45,13 @@ export default function Index() {
     })();
   }, []);
 
+  const handleLogout = async () => {
+    await storage.secureRemove(TOKEN_KEY);
+    setUser(null);
+    setProject(null);
+    setTab("home");
+  };
+
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(""), 2000);
@@ -118,7 +125,7 @@ export default function Index() {
 
   let content: any;
   if (tab === "home") {
-    content = <Home user={user} go={go} cep={cep} onEditCep={() => setShowCepModal(true)} />;
+    content = <Home user={user} go={go} cep={cep} onEditCep={() => setShowCepModal(true)} onLogout={handleLogout} />;
   } else if (tab === "builder") {
     content = (
       <Builder
