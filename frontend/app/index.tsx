@@ -7,6 +7,7 @@ import { colors } from "@/src/theme";
 import { Icon } from "@/src/components/UI";
 import { Auth } from "@/src/components/Auth";
 import { Home } from "@/src/components/Home";
+import { ChangePassword } from "@/src/components/ChangePassword";
 import { Builder } from "@/src/components/Builder";
 import { Plan2D } from "@/src/components/Plan2D";
 import { Estimator } from "@/src/components/Estimator";
@@ -24,7 +25,7 @@ const CEP_KEY = "constroi_facil_cep";
 export default function Index() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<"home" | "builder" | "plan" | "3d" | "estimate" | "offers" | "cart" | "templates" | "alerts" | "projects">("home");
+  const [tab, setTab] = useState<"home" | "builder" | "plan" | "3d" | "estimate" | "offers" | "cart" | "templates" | "alerts" | "projects" | "change-password">("home");
   const [project, setProject] = useState<Project | null>(null);
   const [cep, setCep] = useState<CepData | null>(null);
   const [showCepModal, setShowCepModal] = useState(false);
@@ -126,6 +127,8 @@ export default function Index() {
   let content: any;
   if (tab === "home") {
     content = <Home user={user} go={go} cep={cep} onEditCep={() => setShowCepModal(true)} onLogout={handleLogout} />;
+  } else if (tab === "change-password") {
+    content = <ChangePassword onBack={() => setTab("home")} onDone={() => { setToast("Senha alterada com sucesso"); setTab("home"); }} />;
   } else if (tab === "builder") {
     content = (
       <Builder
@@ -209,7 +212,7 @@ export default function Index() {
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       ) : null}
-      {tab === "3d" ? null : (
+      {tab === "3d" || tab === "change-password" ? null : (
         <View style={styles.tabbar}>
           {[
             ["home", "Início", "home-outline"],

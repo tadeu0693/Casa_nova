@@ -8,6 +8,9 @@ import re
 import json
 import uuid
 import asyncio
+import secrets
+import smtplib
+from email.mime.text import MIMEText
 
 import requests
 from dotenv import load_dotenv
@@ -55,6 +58,21 @@ class Credentials(BaseModel):
 
 class SessionInput(BaseModel):
     session_id: str
+
+
+class ChangePasswordInput(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6)
+
+
+class ForgotPasswordInput(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordInput(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str = Field(min_length=6)
 
 
 class Room(BaseModel):
@@ -127,6 +145,8 @@ async def indexes():
     await db.users.create_index("user_id", unique=True)
     await db.user_sessions.create_index("session_token", unique=True)
     await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
+    await db.password_resets.create_index("email", unique=True)
+    await db.password_resets.create_index("expires_at", expireAfterSeconds=0)
     await db.projects.create_index([("user_id", 1), ("project_id", 1)], unique=True)
     await db.cart_items.create_index([("user_id", 1), ("offer_id", 1)], unique=True)
     await db.alerts.create_index([("user_id", 1), ("query", 1)])
@@ -174,6 +194,99 @@ async def google_session(body: SessionInput):
 @api.get("/auth/me")
 async def me(authorization: Optional[str] = Header(default=None)):
     return {"user": clean(dict(await current_user(authorization)))}
+
+
+@api.post("/auth/change-password")
+async def change_password(body: ChangePasswordInput, authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    if not user.get("password_hash") or not pwd_context.verify(body.current_password, user["password_hash"]):
+        raise HTTPException(401, "Senha atual incorreta")
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"password_hash": pwd_context.hash(body.new_password)}})
+    return {"ok": True}
+
+
+def _send_email(to_email: str, subject: str, body: str) -> bool:
+    """Sends a plain-text email over SMTP. Works with Gmail (with an App Password),
+    Outlook, or any transactional email provider that exposes SMTP — configure via
+    the SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS/SMTP_FROM environment variables.
+    Returns False (never raises) if SMTP isn't configured or sending fails, so a
+    misconfigured mail server never crashes the request — the caller decides what
+    to tell the user.
+    """
+    host = os.environ.get("SMTP_HOST")
+    user = os.environ.get("SMTP_USER")
+    password = os.environ.get("SMTP_PASS")
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    from_addr = os.environ.get("SMTP_FROM", user or "")
+    if not host or not user or not password:
+        logging.warning("SMTP not configured — skipping email send to %s", to_email)
+        return False
+    try:
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = from_addr
+        msg["To"] = to_email
+        with smtplib.SMTP(host, port, timeout=10) as server:
+            server.starttls()
+            server.login(user, password)
+            server.sendmail(from_addr, [to_email], msg.as_string())
+        return True
+    except Exception as e:
+        logging.warning("Failed to send email to %s: %s", to_email, e)
+        return False
+
+
+@api.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordInput):
+    email = body.email.lower()
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    # Always return the same generic message whether or not the email exists —
+    # this avoids letting someone probe which emails have an account here.
+    generic = {"ok": True, "message": "Se esse e-mail tiver uma conta, enviamos um código de 6 dígitos para ele."}
+    if not user:
+        return generic
+    code = f"{secrets.randbelow(1000000):06d}"
+    now = datetime.now(timezone.utc)
+    await db.password_resets.update_one(
+        {"email": email},
+        {"$set": {"email": email, "code_hash": pwd_context.hash(code), "created_at": now, "expires_at": now + timedelta(minutes=30), "attempts": 0}},
+        upsert=True,
+    )
+    sent = await asyncio.to_thread(
+        _send_email,
+        email,
+        "Seu código para redefinir a senha — ConstróiFácil",
+        f"Seu código de redefinição de senha é: {code}\n\nEle vale por 30 minutos. Se você não pediu isso, pode ignorar este e-mail.",
+    )
+    if not sent:
+        logging.warning("Password reset email not sent (SMTP not configured or failed) for %s", email)
+    return generic
+
+
+@api.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordInput):
+    email = body.email.lower()
+    reset = await db.password_resets.find_one({"email": email})
+    if not reset:
+        raise HTTPException(400, "Código inválido ou expirado. Peça um novo.")
+    expires = reset["expires_at"]
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires < datetime.now(timezone.utc):
+        await db.password_resets.delete_one({"email": email})
+        raise HTTPException(400, "Código expirado. Peça um novo.")
+    if reset.get("attempts", 0) >= 5:
+        await db.password_resets.delete_one({"email": email})
+        raise HTTPException(400, "Muitas tentativas erradas. Peça um novo código.")
+    if not pwd_context.verify(body.code, reset["code_hash"]):
+        await db.password_resets.update_one({"email": email}, {"$inc": {"attempts": 1}})
+        raise HTTPException(400, "Código incorreto")
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user:
+        raise HTTPException(404, "Usuário não encontrado")
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"password_hash": pwd_context.hash(body.new_password)}})
+    await db.password_resets.delete_one({"email": email})
+    return {"ok": True}
 
 
 @api.get("/cep/{cep}")

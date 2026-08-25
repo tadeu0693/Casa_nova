@@ -5,10 +5,19 @@ import type { CepData, User } from "@/src/types";
 
 export function Home({ user, go, cep, onEditCep, onLogout }: { user: User; go: (s: string) => void; cep: CepData | null; onEditCep: () => void; onLogout: () => void }) {
   const firstName = (user.name || "").split(" ")[0] || "amigo";
-  const confirmLogout = () => {
-    Alert.alert("Sair da conta", "Tem certeza que quer sair? Você vai precisar entrar de novo com e-mail e senha (ou Google).", [
+  const openAccountMenu = () => {
+    Alert.alert("Sua conta", user.email || "", [
       { text: "Cancelar", style: "cancel" },
-      { text: "Sair", style: "destructive", onPress: onLogout },
+      { text: "Alterar senha", onPress: () => go("change-password") },
+      {
+        text: "Sair da conta",
+        style: "destructive",
+        onPress: () =>
+          Alert.alert("Sair da conta", "Tem certeza que quer sair? Você vai precisar entrar de novo com e-mail e senha (ou Google).", [
+            { text: "Cancelar", style: "cancel" },
+            { text: "Sair", style: "destructive", onPress: onLogout },
+          ]),
+      },
     ]);
   };
   return (
@@ -18,7 +27,7 @@ export function Home({ user, go, cep, onEditCep, onLogout }: { user: User; go: (
           <Text style={styles.eyebrow}>OLÁ, {firstName.toUpperCase()}</Text>
           <Text style={styles.title}>O que vamos construir?</Text>
         </View>
-        <Pressable testID="home-avatar" onPress={confirmLogout} style={styles.avatar}>
+        <Pressable testID="home-avatar" onPress={openAccountMenu} style={styles.avatar}>
           <Text style={styles.avatarText}>{(user.name || "?")[0]?.toUpperCase()}</Text>
         </Pressable>
       </View>
