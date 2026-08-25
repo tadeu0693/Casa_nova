@@ -501,13 +501,13 @@ def _freight_for(uf: str, price: float) -> float:
     return round(min(base + price * 0.03, base + 120.0), 2)
 
 
-async def _fetch_leroy_price(query: str, ua_headers: Dict[str, str]) -> Optional[Dict[str, Any]]:
+async def _fetch_leroy_price(query: str, ua_headers: Dict[str, str]) -> Any:
     """Best-effort real price from Leroy Merlin's own catalog search endpoint (the
     platform they run on — VTEX — exposes this for the storefront's own search-as-you-type).
     This is NOT an official partner API: it's the same public endpoint the site's own
     frontend calls, so it can change or start blocking without notice. If it fails for
-    any reason we simply return None and the caller falls back to the reference estimate —
-    nothing breaks.
+    any reason we simply return (None, "reason") and the caller falls back to the
+    reference estimate — nothing breaks, but we keep the reason for diagnostics.
     """
     try:
         response = await asyncio.to_thread(
@@ -515,12 +515,13 @@ async def _fetch_leroy_price(query: str, ua_headers: Dict[str, str]) -> Optional
             f"https://www.leroymerlin.com.br/api/catalog_system/pub/products/search/{quote_plus(query)}",
             params={"map": "ft"},
             headers=ua_headers,
-            timeout=5,
+            timeout=6,
         )
+        status = response.status_code
         response.raise_for_status()
         products = response.json()
         if not isinstance(products, list) or not products:
-            return None
+            return None, f"HTTP {status}, resposta vazia ou formato inesperado"
         cheapest: Optional[Dict[str, Any]] = None
         for product in products[:10]:
             items = product.get("items") or []
@@ -539,9 +540,11 @@ async def _fetch_leroy_price(query: str, ua_headers: Dict[str, str]) -> Optional
                             "title": product.get("productName") or query,
                             "url": f"https://www.leroymerlin.com.br/{link_text}/p" if link_text else None,
                         }
-        return cheapest
-    except Exception:
-        return None
+        if cheapest is None:
+            return None, "produtos encontrados mas nenhum com preco/estoque valido"
+        return cheapest, None
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"[:300]
 
 
 @api.get("/offers")
@@ -551,6 +554,7 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
     query = re.sub(r"[^\w\s-]", "", q, flags=re.UNICODE)[:80] or "cimento"
     ml_offers: List[Dict[str, Any]] = []
     error: Optional[str] = None
+    error_detail: Optional[str] = None
     ua_headers = {
         "User-Agent": "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36",
         "Accept": "application/json, text/plain, */*",
@@ -579,12 +583,13 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
                 "freight": _freight_for(uf.upper(), price) if uf else 0.0,
                 "freight_days": FREIGHT_TABLE.get(uf.upper(), {}).get("days") if uf else None,
             })
-    except requests.RequestException:
+    except requests.RequestException as e:
         error = "Não foi possível consultar o Mercado Livre agora"
+        error_detail = f"{type(e).__name__}: {e}"[:300]
 
     # Best-effort real price straight from Leroy Merlin's own catalog (see docstring above
     # for why this is "best effort" rather than a guaranteed official integration).
-    leroy_real = await _fetch_leroy_price(query, ua_headers)
+    leroy_real, leroy_error_detail = await _fetch_leroy_price(query, ua_headers)
 
     # Reference median price per unit (BRL) — Brazilian construction market averages 2025.
     # Used to give the user a "typical range" when the marketplace API is unavailable
@@ -638,6 +643,8 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
         "partner_stores": partner_stores,
         "reference": ref,
         "error": error,
+        "error_detail": error_detail,
+        "leroy_error_detail": leroy_error_detail,
     }
 
 
