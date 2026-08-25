@@ -122,12 +122,22 @@ export function build3DHtml(project: Project): string {
   const ROOF_H = Math.max(1.0, Math.min(roofSpan * 0.24, 2.6)); // proportional pitch, capped
   const buildingHeight = topFloor * FLOOR_H + WALL_H + ROOF_H;
 
+  // The camera frames the ACTUAL BUILT FOOTPRINT (every room, every floor) — not the
+  // lot size. A person can set a big lot and only build a modest house on it; framing
+  // by lot size then makes the house look like a tiny speck in an empty field.
+  const wholeFootprint = bboxOf(PROJECT.rooms);
+  const focusW = Math.max(wholeFootprint.w || 0, 3);
+  const focusL = Math.max(wholeFootprint.l || 0, 3);
+
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xF8F7F4);
   scene.fog = new THREE.Fog(0xF8F7F4, 40, 140);
 
   // Center scene at (0,0) using the LOT dimensions (ground slab always covers the full lot).
   const cx = PROJECT.width / 2, cz = PROJECT.length / 2;
+  // Where the built footprint actually sits, in the same centered world coordinates.
+  const focusX = wholeFootprint.cx != null ? -cx + wholeFootprint.cx : 0;
+  const focusZ = wholeFootprint.cz != null ? -cz + wholeFootprint.cz : 0;
 
   const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 500);
   const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
@@ -135,10 +145,10 @@ export function build3DHtml(project: Project): string {
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
 
-  const diag = Math.hypot(PROJECT.width, PROJECT.length, buildingHeight);
+  const diag = Math.hypot(focusW, focusL, buildingHeight);
   const midY = buildingHeight / 2;
-  camera.position.set(diag * 1.05, diag * 0.85 + midY, diag * 1.05);
-  camera.lookAt(0, midY * 0.6, 0);
+  camera.position.set(focusX + diag * 1.05, diag * 0.85 + midY, focusZ + diag * 1.05);
+  camera.lookAt(focusX, midY * 0.6, focusZ);
 
   const controls = new THREE.OrbitControls(camera, canvas);
   controls.enableDamping = true;
@@ -146,12 +156,12 @@ export function build3DHtml(project: Project): string {
   controls.maxPolarAngle = Math.PI / 2 - 0.04;
   controls.minDistance = diag * 0.3;
   controls.maxDistance = diag * 2.5;
-  controls.target.set(0, midY * 0.6, 0);
+  controls.target.set(focusX, midY * 0.6, focusZ);
 
   // Lights
   scene.add(new THREE.HemisphereLight(0xffffff, 0xE6DFCF, 0.75));
   const sun = new THREE.DirectionalLight(0xffffff, 0.95);
-  sun.position.set(diag, diag * 1.3, diag * 0.6);
+  sun.position.set(focusX + diag, diag * 1.3, focusZ + diag * 0.6);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
   scene.add(sun);
@@ -419,8 +429,8 @@ export function build3DHtml(project: Project): string {
     document.getElementById('labels').style.display = on ? 'block' : 'none';
   });
   document.getElementById('btnTop').addEventListener('click', function(){
-    camera.position.set(0.15, diag * 1.5, 0.2);
-    controls.target.set(0, midY * 0.6, 0);
+    camera.position.set(focusX + 0.15, diag * 1.5, focusZ + 0.2);
+    controls.target.set(focusX, midY * 0.6, focusZ);
     controls.update();
   });
 

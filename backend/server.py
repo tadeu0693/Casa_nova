@@ -256,8 +256,12 @@ async def duplicate_project(project_id: str, authorization: Optional[str] = Head
 @api.post("/estimate")
 async def estimate(body: ProjectInput, authorization: Optional[str] = Header(default=None)):
     await current_user(authorization)
-    area = body.width * body.length
     rooms = body.rooms or [Room(name="Ambiente principal", width=body.width, length=body.length)]
+    # IMPORTANT: use the BUILT area (sum of each room) for materials/cost, not the lot
+    # size (width × length). The lot can be much bigger than what's actually being built
+    # (e.g. a 30×30m lot with a modest house on it) — using lot size there would wildly
+    # overestimate every material quantity and the total project cost.
+    area = round(sum(r.width * r.length for r in rooms), 2) or (body.width * body.length)
     materials = [
         {"name": "Cimento 50kg", "quantity": max(1, round(area * 0.35)), "unit": "sacos", "category": "Estrutura", "room": "Todos", "search": "cimento saco 50kg", "unit_cost": 42.0},
         {"name": "Areia média", "quantity": round(area * 0.045, 1), "unit": "m³", "category": "Estrutura", "room": "Todos", "search": "areia média construção", "unit_cost": 130.0},
@@ -510,21 +514,25 @@ async def _fetch_leroy_price(query: str, ua_headers: Dict[str, str]) -> Optional
         products = response.json()
         if not isinstance(products, list) or not products:
             return None
-        for product in products[:5]:
+        cheapest: Optional[Dict[str, Any]] = None
+        for product in products[:10]:
             items = product.get("items") or []
             for item in items:
                 sellers = item.get("sellers") or []
                 for seller in sellers:
                     offer = seller.get("commertialOffer") or {}
                     price = offer.get("Price")
-                    if price and price > 0:
+                    available = offer.get("AvailableQuantity", 0)
+                    if not price or price <= 0 or available <= 0:
+                        continue
+                    if cheapest is None or price < cheapest["price"]:
                         link_text = product.get("linkText")
-                        return {
+                        cheapest = {
                             "price": round(float(price), 2),
                             "title": product.get("productName") or query,
                             "url": f"https://www.leroymerlin.com.br/{link_text}/p" if link_text else None,
                         }
-        return None
+        return cheapest
     except Exception:
         return None
 
