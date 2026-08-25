@@ -5,6 +5,7 @@ from urllib.parse import quote_plus
 import logging
 import os
 import re
+import json
 import uuid
 import asyncio
 
@@ -501,6 +502,83 @@ def _freight_for(uf: str, price: float) -> float:
     return round(min(base + price * 0.03, base + 120.0), 2)
 
 
+def _extract_cheapest_from_jsonld(html: str) -> Optional[Dict[str, Any]]:
+    """Many storefronts (regardless of the underlying e-commerce platform) embed
+    schema.org "JSON-LD" structured data in the raw page HTML so Google can show
+    price/rating snippets in search results. It's meant for search engines, but it's
+    plain public HTML — no JS execution, no login, nothing hidden — so a normal GET
+    can read it. This tends to survive site redesigns better than guessing an internal
+    API path, since it's a stable web-wide SEO convention rather than one store's
+    internal implementation detail.
+    """
+    cheapest: Optional[Dict[str, Any]] = None
+
+    def consider(node: Any):
+        nonlocal cheapest
+        if isinstance(node, list):
+            for item in node:
+                consider(item)
+            return
+        if not isinstance(node, dict):
+            return
+        node_type = node.get("@type")
+        types = node_type if isinstance(node_type, list) else [node_type]
+        if any(t in ("Product", "Offer") for t in types if t):
+            offers = node.get("offers")
+            offer_list = offers if isinstance(offers, list) else ([offers] if isinstance(offers, dict) else [])
+            for off in offer_list:
+                if not isinstance(off, dict):
+                    continue
+                price = off.get("price") or off.get("lowPrice")
+                availability = str(off.get("availability", "")).lower()
+                if not price:
+                    continue
+                if availability and "outofstock" in availability:
+                    continue
+                try:
+                    price_f = float(str(price).replace(",", "."))
+                except (TypeError, ValueError):
+                    continue
+                if price_f <= 0:
+                    continue
+                if cheapest is None or price_f < cheapest["price"]:
+                    cheapest = {
+                        "price": round(price_f, 2),
+                        "title": node.get("name") or "",
+                        "url": off.get("url") or node.get("url"),
+                    }
+        # Keep walking in case of nested @graph structures.
+        for value in node.values():
+            if isinstance(value, (dict, list)):
+                consider(value)
+
+    for match in re.findall(r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE):
+        try:
+            data = json.loads(match.strip())
+        except (json.JSONDecodeError, ValueError):
+            continue
+        consider(data)
+    return cheapest
+
+
+async def _fetch_price_by_scraping(url: str, ua_headers: Dict[str, str]) -> Any:
+    """Best-effort real price by reading a store's own search-results page HTML and
+    pulling out its embedded JSON-LD (see docstring above). Same disclaimer as the
+    Leroy Merlin catalog call: this is not an official integration, can stop working
+    without notice, and always falls back to the reference estimate on any failure."""
+    try:
+        response = await asyncio.to_thread(requests.get, url, headers=ua_headers, timeout=8)
+        status = response.status_code
+        if status >= 400:
+            return None, f"HTTP {status}"
+        cheapest = _extract_cheapest_from_jsonld(response.text)
+        if cheapest is None:
+            return None, "pagina carregada mas sem dados estruturados (JSON-LD) de produto"
+        return cheapest, None
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"[:300]
+
+
 async def _fetch_leroy_price(query: str, ua_headers: Dict[str, str]) -> Any:
     """Best-effort real price from Leroy Merlin's own catalog search endpoint (the
     platform they run on — VTEX — exposes this for the storefront's own search-as-you-type).
@@ -597,6 +675,11 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
     ref = _reference_price(query, ml_offers)
 
     encoded = quote_plus(query)
+    cec_url = f"https://www.cec.com.br/busca-produto?text={encoded}"
+    telha_url = f"https://www.telhanorte.com.br/s?q={encoded}"
+    cec_real, cec_error_detail = await _fetch_price_by_scraping(cec_url, ua_headers)
+    telha_real, telha_error_detail = await _fetch_price_by_scraping(telha_url, ua_headers)
+
     # Public search deep-links — we don't scrape, we surface the store's own search URL
     # so the user always sees fresh, real prices on the store's site.
     partner_stores = [
@@ -614,25 +697,27 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
         },
         {
             "id": f"cec_{encoded}",
-            "title": f"{q} na C&C",
+            "title": cec_real["title"] if (cec_real and cec_real.get("title")) else f"{q} na C&C",
             "price_range": ref["range"],
-            "estimated_price": ref["median"],
+            "estimated_price": cec_real["price"] if cec_real else ref["median"],
             "store": "C&C Casa e Construção",
-            "url": f"https://www.cec.com.br/busca-produto?text={encoded}",
+            "url": cec_real["url"] if (cec_real and cec_real.get("url")) else cec_url,
             "thumbnail": None,
             "type": "search",
-            "note": ref["note"],
+            "note": "Preço real do site (agora)" if cec_real else ref["note"],
+            "real_price": bool(cec_real),
         },
         {
             "id": f"telha_{encoded}",
-            "title": f"{q} na Telhanorte",
+            "title": telha_real["title"] if (telha_real and telha_real.get("title")) else f"{q} na Telhanorte",
             "price_range": ref["range"],
-            "estimated_price": ref["median"],
+            "estimated_price": telha_real["price"] if telha_real else ref["median"],
             "store": "Telhanorte",
-            "url": f"https://www.telhanorte.com.br/s?q={encoded}",
+            "url": telha_real["url"] if (telha_real and telha_real.get("url")) else telha_url,
             "thumbnail": None,
             "type": "search",
-            "note": ref["note"],
+            "note": "Preço real do site (agora)" if telha_real else ref["note"],
+            "real_price": bool(telha_real),
         },
     ]
     return {
@@ -645,6 +730,8 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
         "error": error,
         "error_detail": error_detail,
         "leroy_error_detail": leroy_error_detail,
+        "cec_error_detail": cec_error_detail,
+        "telha_error_detail": telha_error_detail,
     }
 
 
