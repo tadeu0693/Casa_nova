@@ -62,7 +62,7 @@ export function build3DHtml(project: Project): string {
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{ --brand:#C85A32; --brand-dark:#A9451C; --ink:#1A1A1A; --glass:rgba(248,247,244,0.88); }
-  html,body{margin:0;padding:0;overflow:hidden;background:#F8F7F4;color:var(--ink);font-family:'Inter',-apple-system,sans-serif;height:100%;}
+  html,body{margin:0;padding:0;overflow:hidden;background:#BFE0EA;color:var(--ink);font-family:'Inter',-apple-system,sans-serif;height:100%;}
   #app{width:100vw;height:100vh;display:block;touch-action:none;}
   #labels{position:absolute;inset:0;pointer-events:none;overflow:hidden;}
   .lbl{position:absolute;transform:translate(-50%,-100%);background:rgba(26,26,26,.82);backdrop-filter:blur(4px);color:#fff;font-weight:600;font-size:12px;padding:4px 9px;border-radius:8px;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.18);}
@@ -107,7 +107,10 @@ export function build3DHtml(project: Project): string {
 
   // Roof pitch scales with the TOP floor's own footprint (not the whole lot),
   // and is capped to a sane pitch so a large building doesn't get a giant flat diamond.
-  const topFloorRooms = PROJECT.rooms.filter(function(r){ return (r.floor || 0) === topFloor; });
+  // Only ROOFED (enclosed, walled) rooms belong under the pitched roof — a pool, lawn,
+  // open driveway or balcony is outdoor by nature and must sit outside the roof's footprint.
+  const OUTDOOR_KINDS = ['grass', 'asphalt', 'pool', 'deck'];
+  const topFloorRooms = PROJECT.rooms.filter(function(r){ return (r.floor || 0) === topFloor && OUTDOOR_KINDS.indexOf(r.style.kind) === -1; });
   function bboxOf(rooms){
     if (!rooms.length) return { w: PROJECT.width, l: PROJECT.length };
     let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
@@ -130,8 +133,8 @@ export function build3DHtml(project: Project): string {
   const focusL = Math.max(wholeFootprint.l || 0, 3);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xF8F7F4);
-  scene.fog = new THREE.Fog(0xF8F7F4, 40, 140);
+  scene.background = new THREE.Color(0xBFE0EA);
+  scene.fog = new THREE.Fog(0xBFE0EA, 40, 140);
 
   // Center scene at (0,0) using the LOT dimensions (ground slab always covers the full lot).
   const cx = PROJECT.width / 2, cz = PROJECT.length / 2;
@@ -166,10 +169,11 @@ export function build3DHtml(project: Project): string {
   sun.shadow.mapSize.set(1024, 1024);
   scene.add(sun);
 
-  // Ground (lawn beyond the building footprint)
+  // Ground (lawn beyond the building footprint) — a distinct sage green, so it doesn't
+  // blend visually into the pale cream walls/background like a near-white tone would.
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(PROJECT.width * 2.2, PROJECT.length * 2.2),
-    new THREE.MeshStandardMaterial({ color: 0xE9E4D7, roughness: 1 })
+    new THREE.MeshStandardMaterial({ color: 0xAEC08C, roughness: 1 })
   );
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.02;
