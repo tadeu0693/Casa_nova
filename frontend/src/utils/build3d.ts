@@ -268,18 +268,8 @@ export function build3DHtml(project: Project): string {
     });
   }
 
-  // Ground slab (térreo) — always spans the full lot.
-  const groundSlab = new THREE.Mesh(
-    new THREE.BoxGeometry(PROJECT.width, SLAB_T, PROJECT.length),
-    new THREE.MeshStandardMaterial({ color: 0xC7BFA9, roughness: 1 })
-  );
-  groundSlab.position.set(0, -SLAB_T / 2, 0);
-  groundSlab.receiveShadow = true;
-  scene.add(groundSlab);
-
-  // Soft contact shadow under the whole footprint — a simple radial-gradient blob,
-  // not a real shadow map, but it visually "grounds" the building instead of it
-  // looking like it's floating on the lawn.
+  // Soft contact shadow under the BUILT footprint (not the lot) — a simple
+  // radial-gradient blob that visually "grounds" the building.
   (function addContactShadow(){
     const c = document.createElement('canvas');
     c.width = 128; c.height = 128;
@@ -291,9 +281,9 @@ export function build3DHtml(project: Project): string {
     ctx.fillRect(0, 0, 128, 128);
     const tex = new THREE.CanvasTexture(c);
     const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
-    const blob = new THREE.Mesh(new THREE.PlaneGeometry(PROJECT.width * 1.5, PROJECT.length * 1.5), mat);
+    const blob = new THREE.Mesh(new THREE.PlaneGeometry(focusW * 1.6, focusL * 1.6), mat);
     blob.rotation.x = -Math.PI / 2;
-    blob.position.set(0, -0.015, 0);
+    blob.position.set(focusX, -0.015, focusZ);
     scene.add(blob);
   })();
 
@@ -345,17 +335,18 @@ export function build3DHtml(project: Project): string {
     floorGroups[floorNum] = group;
     scene.add(group);
 
-    // Every floor above the ground gets its own full slab (acts as the ceiling
-    // of the floor below / floor of the one above) — a real building trait.
-    if (floorNum > 0) {
-      const levelSlab = new THREE.Mesh(
-        new THREE.BoxGeometry(PROJECT.width, SLAB_T, PROJECT.length),
-        new THREE.MeshStandardMaterial({ color: 0xC7BFA9, roughness: 1 })
-      );
-      levelSlab.position.set(0, baseY - SLAB_T / 2, 0);
-      levelSlab.receiveShadow = true;
-      group.add(levelSlab);
-    }
+    // Every floor gets its own slab, sized to what's ACTUALLY BUILT on that floor
+    // (with a small margin), not the whole lot — a lot is very often bigger than
+    // the house sitting on it.
+    const floorFootprint = bboxOf(roomsOnFloor);
+    const SLAB_MARGIN = 0.35;
+    const slab = new THREE.Mesh(
+      new THREE.BoxGeometry(floorFootprint.w + SLAB_MARGIN * 2, SLAB_T, floorFootprint.l + SLAB_MARGIN * 2),
+      new THREE.MeshStandardMaterial({ color: 0xC7BFA9, roughness: 1 })
+    );
+    slab.position.set(floorFootprint.cx != null ? -cx + floorFootprint.cx : 0, baseY - SLAB_T / 2, floorFootprint.cz != null ? -cz + floorFootprint.cz : 0);
+    slab.receiveShadow = true;
+    group.add(slab);
 
     const vLines = {}, hLines = {};
 
