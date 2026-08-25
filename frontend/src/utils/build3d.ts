@@ -135,8 +135,20 @@ export function build3DHtml(project: Project): string {
   const focusL = Math.max(wholeFootprint.l || 0, 3);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xBFE0EA);
-  scene.fog = new THREE.Fog(0xBFE0EA, 40, 140);
+  // Sky: a soft vertical gradient (deeper blue up top, paler near the horizon) reads
+  // far more like an actual sky than a single flat color.
+  const skyCanvas = document.createElement('canvas');
+  skyCanvas.width = 2; skyCanvas.height = 256;
+  const skyCtx = skyCanvas.getContext('2d');
+  const skyGrad = skyCtx.createLinearGradient(0, 0, 0, 256);
+  skyGrad.addColorStop(0, '#8FCBE0');
+  skyGrad.addColorStop(0.6, '#CDE9EF');
+  skyGrad.addColorStop(1, '#F3F1E6');
+  skyCtx.fillStyle = skyGrad;
+  skyCtx.fillRect(0, 0, 2, 256);
+  const skyTex = new THREE.CanvasTexture(skyCanvas);
+  scene.background = skyTex;
+  scene.fog = new THREE.Fog(0xCDE9EF, 45, 150);
 
   // Center scene at (0,0) using the LOT dimensions (ground slab always covers the full lot).
   const cx = PROJECT.width / 2, cz = PROJECT.length / 2;
@@ -265,6 +277,65 @@ export function build3DHtml(project: Project): string {
   groundSlab.receiveShadow = true;
   scene.add(groundSlab);
 
+  // Soft contact shadow under the whole footprint — a simple radial-gradient blob,
+  // not a real shadow map, but it visually "grounds" the building instead of it
+  // looking like it's floating on the lawn.
+  (function addContactShadow(){
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 128;
+    const ctx = c.getContext('2d');
+    const grad = ctx.createRadialGradient(64, 64, 10, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(0,0,0,0.28)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+    const tex = new THREE.CanvasTexture(c);
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+    const blob = new THREE.Mesh(new THREE.PlaneGeometry(PROJECT.width * 1.5, PROJECT.length * 1.5), mat);
+    blob.rotation.x = -Math.PI / 2;
+    blob.position.set(0, -0.015, 0);
+    scene.add(blob);
+  })();
+
+  // A handful of simple trees scattered around the lot, avoiding the built footprint —
+  // purely decorative, but empty lawn with zero landscaping reads as flat/unfinished.
+  (function addTrees(){
+    const footprint = bboxOf(PROJECT.rooms.length ? PROJECT.rooms : []);
+    const marginX = PROJECT.width / 2, marginZ = PROJECT.length / 2;
+    const trunkMat = new THREE.MeshStandardMaterial({ color: '#6b4a30', roughness: 0.9 });
+    const leafMat = new THREE.MeshStandardMaterial({ color: '#5f8a52', roughness: 0.85 });
+    const leafMat2 = new THREE.MeshStandardMaterial({ color: '#6f9a5f', roughness: 0.85 });
+    function tree(x, z, scale) {
+      const g = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 1.4, 7), trunkMat);
+      trunk.position.y = 0.7; trunk.castShadow = true;
+      const c1 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.85, 0), leafMat);
+      c1.position.y = 1.7; c1.castShadow = true;
+      const c2 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 0), leafMat2);
+      c2.position.set(0.35, 2.05, 0.15); c2.castShadow = true;
+      g.add(trunk, c1, c2);
+      g.position.set(x, 0, z);
+      g.scale.setScalar(scale);
+      return g;
+    }
+    // Try a handful of lot corners/edges; skip any spot too close to the building.
+    const candidates = [
+      [-marginX + 1.2, -marginZ + 1.2], [marginX - 1.2, -marginZ + 1.2],
+      [-marginX + 1.2, marginZ - 1.2], [marginX - 1.2, marginZ - 1.2],
+      [0, -marginZ + 1.0], [0, marginZ - 1.0],
+    ];
+    candidates.forEach(function(pos, i){
+      const wx = pos[0], wz = pos[1];
+      // Convert back to lot-space (0..width, 0..length) to test against the footprint.
+      const lotX = wx + marginX, lotZ = wz + marginZ;
+      const clear = lotX < footprint.cx - footprint.w / 2 - 0.8 || lotX > footprint.cx + footprint.w / 2 + 0.8 ||
+                    lotZ < footprint.cz - footprint.l / 2 - 0.8 || lotZ > footprint.cz + footprint.l / 2 + 0.8;
+      if (clear && marginX > 2 && marginZ > 2) {
+        scene.add(tree(wx, wz, 0.85 + (i % 3) * 0.12));
+      }
+    });
+  })();
+
   const labelDefs = []; // {el, pos: THREE.Vector3, floor}
 
   floorKeys.forEach(function(floorNum){
@@ -287,6 +358,12 @@ export function build3DHtml(project: Project): string {
     }
 
     const vLines = {}, hLines = {};
+
+    // Which walls are truly EXTERIOR (facing outside, not a shared partition with the
+    // room next door) — needed so windows only appear on the building's actual facade.
+    const indoorOnFloor = roomsOnFloor.filter(function(r){ return OUTDOOR_KINDS.indexOf(r.style.kind) === -1; });
+    const floorBounds = bboxOf(indoorOnFloor);
+    const EPS = 0.05;
 
     roomsOnFloor.forEach(function(r){
       // World coords: house top-left at (-cx, -cz)
@@ -381,6 +458,37 @@ export function build3DHtml(project: Project): string {
         const toilet = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.45, 12), new THREE.MeshStandardMaterial({ color: '#f4f2ee' }));
         toilet.position.set(rx - r.w / 2 + 0.35, baseY + 0.22, rz - r.l / 2 + 0.35);
         group.add(toilet);
+      }
+
+      // A window on whichever side of this room is a real EXTERIOR wall (facing the
+      // outside of the building, not a shared partition with the room next door).
+      const WINDOWED_KINDS = ['bedroom', 'living', 'kitchen', 'openconcept', 'room', 'wet'];
+      if (WINDOWED_KINDS.indexOf(s.kind) !== -1) {
+        const isLeftExterior = r.x <= floorBounds.cx - floorBounds.w / 2 + EPS;
+        const isRightExterior = r.x + r.w >= floorBounds.cx + floorBounds.w / 2 - EPS;
+        const isTopExterior = r.y <= floorBounds.cz - floorBounds.l / 2 + EPS;
+        const isBottomExterior = r.y + r.l >= floorBounds.cz + floorBounds.l / 2 - EPS;
+        const glassMat = new THREE.MeshStandardMaterial({ color: '#bfe0ea', roughness: 0.15, metalness: 0.25, transparent: true, opacity: 0.6 });
+        const frameMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.6 });
+        const sill = 0.95, winH = 1.1;
+        function addWindow(px, pz, spanAxisLen, vertical) {
+          const winW = Math.min(spanAxisLen * 0.5, 1.6);
+          if (winW < 0.5) return;
+          const glass = new THREE.Mesh(new THREE.PlaneGeometry(vertical ? winW : winW, winH * 0.85), glassMat);
+          if (vertical) glass.rotation.y = Math.PI / 2;
+          glass.position.set(px, baseY + sill + winH / 2, pz);
+          group.add(glass);
+          const frame = new THREE.Mesh(
+            vertical ? new THREE.BoxGeometry(0.04, winH, winW) : new THREE.BoxGeometry(winW, winH, 0.04),
+            frameMat
+          );
+          frame.position.set(px, baseY + sill + winH / 2, pz);
+          group.add(frame);
+        }
+        if (isRightExterior) addWindow(rx + r.w / 2 + 0.01, rz, r.l, true);
+        else if (isLeftExterior) addWindow(rx - r.w / 2 - 0.01, rz, r.l, true);
+        else if (isBottomExterior) addWindow(rx, rz + r.l / 2 + 0.01, r.w, false);
+        else if (isTopExterior) addWindow(rx, rz - r.l / 2 - 0.01, r.w, false);
       }
 
       // DOM label (HTML overlay, crisper than a 3D sprite) with the floor as a subtitle.
