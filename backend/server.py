@@ -13,8 +13,9 @@ import smtplib
 from email.mime.text import MIMEText
 
 import requests
+from fpdf import FPDF
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, HTTPException, Header
+from fastapi import APIRouter, FastAPI, HTTPException, Header, Response
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -102,6 +103,11 @@ class CartItem(BaseModel):
     thumbnail: str = ""
     freight: float = 0.0
     quantity: int = 1
+    purchased: bool = False
+
+
+class PurchasedInput(BaseModel):
+    purchased: bool
 
 
 class AlertInput(BaseModel):
@@ -368,15 +374,171 @@ async def duplicate_project(project_id: str, authorization: Optional[str] = Head
     return clean(copy)
 
 
-@api.post("/estimate")
-async def estimate(body: ProjectInput, authorization: Optional[str] = Header(default=None)):
-    await current_user(authorization)
-    rooms = body.rooms or [Room(name="Ambiente principal", width=body.width, length=body.length)]
+@api.get("/projects/{project_id}/pdf")
+async def project_pdf(project_id: str, authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    project = await db.projects.find_one({"user_id": user["user_id"], "project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(404, "Projeto não encontrado")
+    rooms = [Room(**r) for r in (project.get("rooms") or [])]
+    est = _compute_estimate(rooms, project.get("width", 8), project.get("length", 8))
+    pdf_bytes = _build_project_pdf(project, rooms, est)
+    safe_name = re.sub(r"[^a-zA-Z0-9]+", "-", project.get("name", "projeto")).strip("-").lower() or "projeto"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.pdf"'},
+    )
+
+
+def _pdf_safe(text: str) -> str:
+    """The PDF's core Helvetica font doesn't include glyphs for things like ² or ³
+    (superscript digits aren't in the standard base-14 font subset), so m² -> m2,
+    m³ -> m3, and anything else outside Latin-1 gets swapped for its closest
+    plain-ASCII form so the PDF never silently drops a character mid-word.
+    """
+    text = str(text).replace("²", "2").replace("³", "3")
+    return text.encode("latin-1", "replace").decode("latin-1")
+
+
+def _build_project_pdf(project: Dict[str, Any], rooms: List[Room], est: Dict[str, Any]) -> bytes:
+    BRAND = (200, 90, 50)       # #C85A32
+    BRAND_DARK = (169, 69, 28)  # #A9451C
+    INK = (26, 26, 26)
+    MUTED = (112, 111, 106)
+    LINE = (226, 223, 216)
+    CARD = (239, 236, 230)
+
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.set_margins(15, 15, 15)
+    page_w = pdf.w - 30  # usable width between the two 15mm margins
+
+    # ---------- Cover ----------
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.set_text_color(*INK)
+    pdf.cell(0, 12, _pdf_safe(project.get("name", "Meu projeto")), ln=1)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.set_text_color(*MUTED)
+    pdf.cell(0, 8, _pdf_safe(f"{project.get('build_type', '')} - {project.get('width')} x {project.get('length')} m"), ln=1)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 6, f"Gerado em {datetime.now(timezone.utc).strftime('%d/%m/%Y')} pelo ConstruiFacil", ln=1)
+    pdf.set_draw_color(*LINE)
+    pdf.line(15, pdf.get_y() + 3, pdf.w - 15, pdf.get_y() + 3)
+    pdf.ln(10)
+
+    # ---------- Floor plans (one simplified diagram per floor) ----------
+    floor_groups: Dict[int, List[Room]] = {}
+    for r in rooms:
+        floor_groups.setdefault(r.floor or 0, []).append(r)
+
+    for floor_num in sorted(floor_groups.keys()):
+        floor_rooms = floor_groups[floor_num]
+        floor_label = "Terreo" if floor_num == 0 else f"{floor_num} Andar"
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(*BRAND_DARK)
+        pdf.cell(0, 9, f"Planta - {floor_label}", ln=1)
+
+        min_x = min(r.x for r in floor_rooms)
+        max_x = max(r.x + r.width for r in floor_rooms)
+        min_y = min(r.y for r in floor_rooms)
+        max_y = max(r.y + r.length for r in floor_rooms)
+        span_x = max(max_x - min_x, 0.5)
+        span_y = max(max_y - min_y, 0.5)
+
+        draw_w = page_w
+        draw_h = 95.0
+        scale = min(draw_w / span_x, draw_h / span_y)
+        used_w = span_x * scale
+        used_h = span_y * scale
+        origin_x = pdf.get_x() + (draw_w - used_w) / 2
+        origin_y = pdf.get_y()
+
+        pdf.set_fill_color(*CARD)
+        pdf.rect(pdf.get_x(), origin_y, draw_w, draw_h, style="F")
+
+        for r in floor_rooms:
+            rx = origin_x + (r.x - min_x) * scale
+            ry = origin_y + (r.y - min_y) * scale
+            rw = max(r.width * scale, 2)
+            rl = max(r.length * scale, 2)
+            pdf.set_draw_color(*BRAND)
+            pdf.set_fill_color(255, 255, 255)
+            pdf.rect(rx, ry, rw, rl, style="DF")
+            pdf.set_xy(rx, ry + rl / 2 - 2)
+            pdf.set_font("Helvetica", "", 6.5)
+            pdf.set_text_color(*INK)
+            pdf.cell(rw, 4, _pdf_safe(r.name[:14]), align="C")
+
+        pdf.set_xy(15, origin_y + draw_h + 4)
+        pdf.ln(4)
+
+    # ---------- Materials list ----------
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 15)
+    pdf.set_text_color(*INK)
+    pdf.cell(0, 10, "Lista de materiais", ln=1)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(*MUTED)
+    pdf.cell(0, 6, _pdf_safe(f"Area construida considerada: {est['area']} m2"), ln=1)
+    pdf.ln(3)
+
+    col_w = [70, 30, 28, 30, 32]
+    headers = ["Material", "Categoria", "Quantidade", "Custo unit.", "Subtotal"]
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_fill_color(*BRAND)
+    pdf.set_text_color(255, 255, 255)
+    for w, h in zip(col_w, headers):
+        pdf.cell(w, 8, h, border=0, fill=True, align="C")
+    pdf.ln(8)
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(*INK)
+    fill = False
+    for m in est["materials"]:
+        subtotal = round(m["quantity"] * m.get("unit_cost", 0), 2)
+        pdf.set_fill_color(*(CARD if fill else (255, 255, 255)))
+        pdf.cell(col_w[0], 8, _pdf_safe(m["name"][:34]), border=0, fill=True)
+        pdf.cell(col_w[1], 8, _pdf_safe(m["category"][:16]), border=0, fill=True, align="C")
+        pdf.cell(col_w[2], 8, _pdf_safe(f"{m['quantity']} {m['unit']}"), border=0, fill=True, align="C")
+        pdf.cell(col_w[3], 8, f"R$ {m.get('unit_cost', 0):.2f}", border=0, fill=True, align="C")
+        pdf.cell(col_w[4], 8, f"R$ {subtotal:.2f}", border=0, fill=True, align="C")
+        pdf.ln(8)
+        fill = not fill
+
+    pdf.ln(8)
+    pdf.set_draw_color(*LINE)
+    pdf.line(15, pdf.get_y(), pdf.w - 15, pdf.get_y())
+    pdf.ln(6)
+
+    # ---------- Budget total ----------
+    pdf.set_fill_color(*INK)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.rect(15, pdf.get_y(), page_w, 26, style="F")
+    pdf.set_xy(20, pdf.get_y() + 4)
+    pdf.cell(0, 6, "ESTIMATIVA INICIAL DE CUSTO TOTAL", ln=1)
+    pdf.set_x(20)
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 10, f"R$ {est['estimated_total']:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."), ln=1)
+    pdf.ln(6)
+
+    pdf.set_font("Helvetica", "", 8.5)
+    pdf.set_text_color(*MUTED)
+    pdf.multi_cell(0, 5, _pdf_safe(est["note"] + " Este documento e uma referencia inicial gerada automaticamente pelo app ConstruiFacil e nao substitui um orcamento fechado com engenheiro ou arquiteto responsavel."))
+
+    output = pdf.output()
+    return bytes(output)
+
+
+def _compute_estimate(rooms: List[Room], width: float, length: float) -> Dict[str, Any]:
+    rooms = rooms or [Room(name="Ambiente principal", width=width, length=length)]
     # IMPORTANT: use the BUILT area (sum of each room) for materials/cost, not the lot
     # size (width × length). The lot can be much bigger than what's actually being built
     # (e.g. a 30×30m lot with a modest house on it) — using lot size there would wildly
     # overestimate every material quantity and the total project cost.
-    area = round(sum(r.width * r.length for r in rooms), 2) or (body.width * body.length)
+    area = round(sum(r.width * r.length for r in rooms), 2) or (width * length)
     materials = [
         {"name": "Cimento 50kg", "quantity": max(1, round(area * 0.35)), "unit": "sacos", "category": "Estrutura", "room": "Todos", "search": "cimento saco 50kg", "unit_cost": 42.0},
         {"name": "Areia média", "quantity": round(area * 0.045, 1), "unit": "m³", "category": "Estrutura", "room": "Todos", "search": "areia média construção", "unit_cost": 130.0},
@@ -459,6 +621,12 @@ async def estimate(body: ProjectInput, authorization: Optional[str] = Header(def
         "per_room": per_room,
         "note": "Estimativa inicial. Confirme o projeto com um profissional responsável.",
     }
+
+
+@api.post("/estimate")
+async def estimate(body: ProjectInput, authorization: Optional[str] = Header(default=None)):
+    await current_user(authorization)
+    return _compute_estimate(body.rooms, body.width, body.length)
 
 
 @api.get("/templates")
@@ -928,8 +1096,16 @@ async def cart_list(authorization: Optional[str] = Header(default=None)):
     docs = await db.cart_items.find({"user_id": user["user_id"]}, {"_id": 0, "user_id": 0}).sort("added_at", -1).to_list(100)
     total_price = round(sum((d.get("price", 0) or 0) * (d.get("quantity", 1) or 1) for d in docs), 2)
     total_freight = round(sum(d.get("freight", 0) or 0 for d in docs), 2)
+    purchased_total = round(sum((d.get("price", 0) or 0) * (d.get("quantity", 1) or 1) for d in docs if d.get("purchased")), 2)
     stores = sorted({d.get("store", "") for d in docs if d.get("store")})
-    return {"items": docs, "total_price": total_price, "total_freight": total_freight, "grand_total": round(total_price + total_freight, 2), "stores": stores}
+    return {
+        "items": docs,
+        "total_price": total_price,
+        "total_freight": total_freight,
+        "grand_total": round(total_price + total_freight, 2),
+        "purchased_total": purchased_total,
+        "stores": stores,
+    }
 
 
 @api.post("/cart")
@@ -938,6 +1114,18 @@ async def cart_add(body: CartItem, authorization: Optional[str] = Header(default
     doc = body.model_dump()
     doc.update({"user_id": user["user_id"], "added_at": datetime.now(timezone.utc).isoformat()})
     await db.cart_items.update_one({"user_id": user["user_id"], "offer_id": doc["offer_id"]}, {"$set": doc}, upsert=True)
+    return {"ok": True}
+
+
+@api.patch("/cart/{offer_id}/purchased")
+async def cart_set_purchased(offer_id: str, body: PurchasedInput, authorization: Optional[str] = Header(default=None)):
+    user = await current_user(authorization)
+    result = await db.cart_items.update_one(
+        {"user_id": user["user_id"], "offer_id": offer_id},
+        {"$set": {"purchased": body.purchased}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(404, "Item não encontrado no carrinho")
     return {"ok": True}
 
 

@@ -124,9 +124,31 @@ export default function Index() {
     setTab("offers");
   };
 
+  const loadExample = async () => {
+    try {
+      const data = await request("/templates");
+      const items = data.templates || [];
+      const t = items.find((x: any) => x.id === "casa_60") || items[0];
+      if (!t) {
+        setToast("Não foi possível carregar o exemplo agora");
+        return;
+      }
+      const payload = { name: `${t.name} (exemplo)`, build_type: t.build_type, width: t.width, length: t.length, rooms: t.rooms };
+      try {
+        const saved = await request("/projects", { method: "POST", body: JSON.stringify({ ...payload, cep: cep?.cep || "" }) });
+        setProject(saved);
+      } catch {
+        setProject(payload as Project);
+      }
+      setTab("plan");
+    } catch {
+      setToast("Não foi possível carregar o exemplo agora");
+    }
+  };
+
   let content: any;
   if (tab === "home") {
-    content = <Home user={user} go={go} cep={cep} onEditCep={() => setShowCepModal(true)} onLogout={handleLogout} />;
+    content = <Home user={user} go={go} cep={cep} onEditCep={() => setShowCepModal(true)} onLogout={handleLogout} onLoadExample={loadExample} />;
   } else if (tab === "change-password") {
     content = <ChangePassword onBack={() => setTab("home")} onDone={() => { setToast("Senha alterada com sucesso"); setTab("home"); }} />;
   } else if (tab === "builder") {
@@ -165,7 +187,7 @@ export default function Index() {
       />
     );
   } else if (tab === "cart") {
-    content = <Cart onExplore={() => setTab("offers")} />;
+    content = <Cart onExplore={() => setTab("offers")} project={project} />;
   } else if (tab === "templates") {
     content = (
       <Templates

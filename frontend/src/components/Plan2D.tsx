@@ -44,6 +44,7 @@ export function Plan2D({
   const [activeFloor, setActiveFloor] = useState(floors[0] ?? 0);
   const visibleIndices = useMemo(() => rooms.map((r, i) => i).filter((i) => (rooms[i].floor || 0) === activeFloor), [rooms, activeFloor]);
   const [selected, setSelected] = useState<number>(visibleIndices[0] ?? 0);
+  const [history, setHistory] = useState<Room[][]>([]);
 
   const scale = useMemo(() => {
     const availW = containerW - PADDING * 2;
@@ -52,7 +53,16 @@ export function Plan2D({
   }, [containerW, project.width, project.length]);
 
   const updateRoom = (idx: number, patch: Partial<Room>) => {
+    setHistory((h) => [...h.slice(-19), rooms]); // keep the last 20 snapshots, that's plenty for "oops"
     setRooms((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  };
+
+  const undo = () => {
+    setHistory((h) => {
+      if (!h.length) return h;
+      setRooms(h[h.length - 1]);
+      return h.slice(0, -1);
+    });
   };
 
   const selectFloor = (f: number) => {
@@ -108,6 +118,10 @@ export function Plan2D({
             <Icon name="resize-outline" size={14} color={colors.muted} />
             <Text style={styles.legendText}>Toque + botões para ajustar</Text>
           </View>
+          <Pressable testID="plan2d-undo" onPress={undo} disabled={!history.length} style={[styles.undoBtn, !history.length && styles.undoBtnDisabled]}>
+            <Icon name="arrow-undo-outline" size={14} color={history.length ? colors.brand : colors.dim} />
+            <Text style={[styles.undoText, !history.length && styles.undoTextDisabled]}>Desfazer</Text>
+          </Pressable>
         </View>
 
         <View
@@ -286,6 +300,10 @@ const styles = StyleSheet.create({
   floorTabTextActive: { color: colors.white },
   legend: { flexDirection: "row", gap: 18, marginBottom: 10 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
+  undoBtn: { flexDirection: "row", alignItems: "center", gap: 5, marginLeft: "auto", backgroundColor: colors.pale, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+  undoBtnDisabled: { backgroundColor: colors.card },
+  undoText: { color: colors.brand, fontSize: 12, fontWeight: "700" },
+  undoTextDisabled: { color: colors.dim },
   legendText: { color: colors.muted, fontSize: 11, fontWeight: "600" },
   canvas: {
     height: CANVAS_HEIGHT,

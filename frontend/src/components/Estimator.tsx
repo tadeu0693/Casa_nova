@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { request } from "@/src/api";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
+import { API, TOKEN_KEY, request } from "@/src/api";
+import { storage } from "@/src/utils/storage";
 import { colors } from "@/src/theme";
 import { Button, Header, Icon, Screen } from "@/src/components/UI";
 import type { Project } from "@/src/types";
@@ -26,6 +29,7 @@ export function Estimator({
   const [data, setData] = useState<EstimateData | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"materials" | "rooms">("materials");
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     request("/estimate", { method: "POST", body: JSON.stringify(project) })
@@ -34,6 +38,31 @@ export function Estimator({
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const exportPdf = async () => {
+    if (!project.project_id) {
+      Alert.alert("Salve o projeto primeiro", "Volte e toque em \"Salvar layout\" na Planta 2D antes de exportar o PDF.");
+      return;
+    }
+    setExporting(true);
+    try {
+      const token = await storage.secureGet(TOKEN_KEY, null);
+      const safeName = project.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "projeto";
+      const fileUri = `${FileSystem.cacheDirectory}${safeName}.pdf`;
+      const result = await FileSystem.downloadAsync(`${API}/projects/${project.project_id}/pdf`, fileUri, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (result.status !== 200) throw new Error("Falha ao gerar PDF");
+      const available = await Sharing.isAvailableAsync();
+      if (available) {
+        await Sharing.shareAsync(result.uri, { mimeType: "application/pdf", dialogTitle: "Exportar projeto em PDF" });
+      }
+    } catch (e) {
+      // A falha ao exportar não deve travar a tela de orçamento — é um recurso extra.
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -137,6 +166,14 @@ export function Estimator({
       <Text style={styles.note}>{data?.note}</Text>
 
       <Button testID="estimator-offers-cta" title="Encontrar melhores ofertas" onPress={onOffers} />
+      <Pressable testID="estimator-export-pdf" onPress={exportPdf} disabled={exporting} style={styles.exportBtn}>
+        {exporting ? (
+          <ActivityIndicator color={colors.brand} size="small" />
+        ) : (
+          <Icon name="document-text-outline" size={17} color={colors.brand} />
+        )}
+        <Text style={styles.exportBtnText}>{exporting ? "Gerando PDF..." : "Exportar em PDF"}</Text>
+      </Pressable>
     </Screen>
   );
 }
@@ -168,4 +205,6 @@ const styles = StyleSheet.create({
   bar: { height: 6, borderRadius: 3, backgroundColor: colors.card, overflow: "hidden" },
   barFill: { height: "100%", backgroundColor: colors.brand, borderRadius: 3 },
   note: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 17, marginBottom: 6 },
+  exportBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10, paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: colors.line },
+  exportBtnText: { color: colors.brand, fontWeight: "700", fontSize: 14 },
 });

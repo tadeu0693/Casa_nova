@@ -3,7 +3,7 @@ import { colors } from "@/src/theme";
 import { Icon, Screen } from "@/src/components/UI";
 import type { CepData, User } from "@/src/types";
 
-export function Home({ user, go, cep, onEditCep, onLogout }: { user: User; go: (s: string) => void; cep: CepData | null; onEditCep: () => void; onLogout: () => void }) {
+export function Home({ user, go, cep, onEditCep, onLogout, onLoadExample }: { user: User; go: (s: string) => void; cep: CepData | null; onEditCep: () => void; onLogout: () => void; onLoadExample: () => void }) {
   const firstName = (user.name || "").split(" ")[0] || "amigo";
   const openAccountMenu = () => {
     Alert.alert("Sua conta", user.email || "", [
@@ -49,6 +49,10 @@ export function Home({ user, go, cep, onEditCep, onLogout }: { user: User; go: (
           <Pressable testID="home-cta-templates" onPress={() => go("templates")} style={styles.heroLinkGhost}>
             <Icon name="sparkles-outline" size={14} color="#fff" />
             <Text style={styles.heroLinkText}>ou use um modelo</Text>
+          </Pressable>
+          <Pressable testID="home-cta-example" onPress={onLoadExample} style={styles.heroLinkGhost}>
+            <Icon name="eye-outline" size={14} color="#fff" />
+            <Text style={styles.heroLinkText}>ver um projeto de exemplo</Text>
           </Pressable>
         </View>
         <View style={styles.blueprint}>

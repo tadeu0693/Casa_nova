@@ -43,6 +43,7 @@ export type CartItem = {
   thumbnail: string;
   freight: number;
   quantity: number;
+  purchased?: boolean;
   added_at?: string;
 };
 export type PriceAlert = {

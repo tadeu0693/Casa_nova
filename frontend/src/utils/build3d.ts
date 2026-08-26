@@ -157,7 +157,7 @@ export function build3DHtml(project: Project): string {
   const focusZ = wholeFootprint.cz != null ? -cz + wholeFootprint.cz : 0;
 
   const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 500);
-  const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+  const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
@@ -592,6 +592,20 @@ export function build3DHtml(project: Project): string {
     camera.position.set(focusX + 0.15, diag * 1.5, focusZ + 0.2);
     controls.target.set(focusX, midY * 0.6, focusZ);
     controls.update();
+  });
+
+  document.getElementById('btnShare').addEventListener('click', function(){
+    try {
+      renderer.render(scene, camera); // make sure the buffer has the latest frame
+      const dataUrl = renderer.domElement.toDataURL('image/png');
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'share_screenshot', dataUrl: dataUrl }));
+      }
+    } catch (e) {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'share_error', message: String(e) }));
+      }
+    }
   });
 
   window.addEventListener('resize', function(){
