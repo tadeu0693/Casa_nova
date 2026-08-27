@@ -1,14 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 
-export function Icon({ name, size = 22, color = colors.ink }: { name: keyof typeof Ionicons.glyphMap; size?: number; color?: string }) {
-  return <Ionicons name={name} size={size} color={color} />;
+export function Icon({ name, size = 22, color }: { name: keyof typeof Ionicons.glyphMap; size?: number; color?: string }) {
+  const { colors } = useTheme();
+  return <Ionicons name={name} size={size} color={color || colors.ink} />;
 }
 
 export function Button({ title, onPress, secondary = false, disabled = false, testID }: { title: string; onPress: () => void; secondary?: boolean; disabled?: boolean; testID?: string }) {
+  const ui = useUi();
   return (
     <Pressable
       testID={testID}
@@ -22,6 +25,8 @@ export function Button({ title, onPress, secondary = false, disabled = false, te
 }
 
 export function Field({ label, value, onChangeText, placeholder, keyboardType = "default", secureTextEntry = false, testID }: any) {
+  const ui = useUi();
+  const { colors, isDark } = useTheme();
   return (
     <View style={ui.field}>
       <Text style={ui.label}>{label}</Text>
@@ -30,7 +35,7 @@ export function Field({ label, value, onChangeText, placeholder, keyboardType = 
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#A4A39D"
+        placeholderTextColor={isDark ? "#6B675E" : "#A4A39D"}
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
         style={ui.input}
@@ -40,6 +45,7 @@ export function Field({ label, value, onChangeText, placeholder, keyboardType = 
 }
 
 export function Header({ title, subtitle }: { title: string; subtitle?: string }) {
+  const ui = useUi();
   return (
     <View style={ui.header}>
       <Text style={ui.title}>{title}</Text>
@@ -49,6 +55,7 @@ export function Header({ title, subtitle }: { title: string; subtitle?: string }
 }
 
 export function Screen({ children, testID }: { children: React.ReactNode; testID?: string }) {
+  const ui = useUi();
   return (
     <SafeAreaView style={ui.safe} edges={["top"]}>
       <ScrollView testID={testID} contentContainerStyle={ui.scroll} showsVerticalScrollIndicator={false}>
@@ -59,6 +66,7 @@ export function Screen({ children, testID }: { children: React.ReactNode; testID
 }
 
 export function Chip({ label, active, onPress, testID }: { label: string; active?: boolean; onPress: () => void; testID?: string }) {
+  const ui = useUi();
   return (
     <Pressable testID={testID} onPress={onPress} style={[ui.chip, active && ui.chipActive]}>
       <Text style={[ui.chipText, active && ui.chipTextActive]}>{label}</Text>
@@ -66,33 +74,42 @@ export function Chip({ label, active, onPress, testID }: { label: string; active
   );
 }
 
-export const ui = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: 20, paddingBottom: 140 },
-  field: { marginTop: 20 },
-  label: { color: colors.muted, fontSize: 12, fontWeight: "700", marginBottom: 8, letterSpacing: 0.3 },
-  input: { height: 50, borderWidth: 1, borderColor: colors.line, borderRadius: 12, paddingHorizontal: 15, color: colors.ink, fontSize: 16, backgroundColor: colors.white },
-  button: { minHeight: 50, borderRadius: 12, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center", paddingHorizontal: 18, marginTop: 20 },
-  buttonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  secondaryButton: { backgroundColor: colors.pale },
-  secondaryText: { color: colors.brand },
-  disabled: { opacity: 0.5 },
-  pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
-  header: { marginBottom: 22 },
-  title: { color: colors.ink, fontSize: 26, lineHeight: 32, fontWeight: "700" },
-  subtle: { color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 6 },
-  chip: {
-    height: 36,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 999,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  chipActive: { borderColor: colors.brand, backgroundColor: colors.pale },
-  chipText: { color: colors.muted, fontSize: 13, fontWeight: "600" },
-  chipTextActive: { color: colors.brand, fontWeight: "700" },
-});
+function buildUi(colors: typeof lightColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    scroll: { padding: 20, paddingBottom: 140 },
+    field: { marginTop: 20 },
+    label: { color: colors.muted, fontSize: 12, fontWeight: "700", marginBottom: 8, letterSpacing: 0.3 },
+    input: { height: 50, borderWidth: 1, borderColor: colors.line, borderRadius: 12, paddingHorizontal: 15, color: colors.ink, fontSize: 16, backgroundColor: colors.card },
+    button: { minHeight: 50, borderRadius: 12, backgroundColor: colors.brand, alignItems: "center", justifyContent: "center", paddingHorizontal: 18, marginTop: 20 },
+    buttonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+    secondaryButton: { backgroundColor: colors.pale },
+    secondaryText: { color: colors.brand },
+    disabled: { opacity: 0.5 },
+    pressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
+    header: { marginBottom: 22 },
+    title: { color: colors.ink, fontSize: 26, lineHeight: 32, fontWeight: "700" },
+    subtle: { color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 6 },
+    chip: {
+      height: 36,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 999,
+      backgroundColor: colors.card,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+    chipActive: { borderColor: colors.brand, backgroundColor: colors.pale },
+    chipText: { color: colors.muted, fontSize: 13, fontWeight: "600" },
+    chipTextActive: { color: colors.brand, fontWeight: "700" },
+  });
+}
+
+// Any screen can call this directly if it needs the same base styles without
+// going through one of the components above.
+export function useUi() {
+  const { colors } = useTheme();
+  return useMemo(() => buildUi(colors), [colors]);
+}

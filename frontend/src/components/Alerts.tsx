@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View, KeyboardAvoidingView, Platform } from "react-native";
 import { request } from "@/src/api";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 import { Button, Field, Header, Icon, Screen } from "@/src/components/UI";
 import type { PriceAlert } from "@/src/types";
 
 const SUGGESTIONS = ["Cimento 50kg", "Areia média", "Bloco cerâmico", "Piso porcelanato", "Tinta acrílica"];
 
 export function Alerts({ onBack, onSeeOffers }: { onBack: () => void; onSeeOffers: (q: string) => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const [items, setItems] = useState<PriceAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -83,6 +86,8 @@ export function Alerts({ onBack, onSeeOffers }: { onBack: () => void; onSeeOffer
 }
 
 function AlertForm({ visible, onClose, onCreated }: { visible: boolean; onClose: () => void; onCreated: () => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const [query, setQuery] = useState("");
   const [price, setPrice] = useState("");
   const [saving, setSaving] = useState(false);
@@ -145,7 +150,8 @@ function AlertForm({ visible, onClose, onCreated }: { visible: boolean; onClose:
   );
 }
 
-const styles = StyleSheet.create({
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
   top: { flexDirection: "row", marginBottom: 4 },
   back: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -8 },
   addBar: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: colors.pale, padding: 14, borderRadius: 12, marginBottom: 16 },
@@ -164,9 +170,10 @@ const styles = StyleSheet.create({
   sheetTitle: { color: colors.ink, fontSize: 20, fontWeight: "700" },
   sheetBody: { color: colors.muted, fontSize: 13, marginTop: 6, lineHeight: 19 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
-  suggest: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  suggest: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line },
   suggestText: { fontSize: 11, color: colors.muted, fontWeight: "600" },
   error: { color: "#A3333D", fontSize: 12, marginTop: 8 },
   cancel: { alignItems: "center", paddingVertical: 14 },
   cancelText: { color: colors.muted, fontWeight: "700" },
 });
+}

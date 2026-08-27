@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { request } from "@/src/api";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 import { Header, Icon, Screen } from "@/src/components/UI";
 import type { CartItem, Project } from "@/src/types";
 
 type CartResp = { items: CartItem[]; total_price: number; total_freight: number; grand_total: number; purchased_total: number; stores: string[] };
 
 export function Cart({ onExplore, project }: { onExplore: () => void; project?: Project | null }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const [data, setData] = useState<CartResp | null>(null);
   const [loading, setLoading] = useState(true);
   const [budget, setBudget] = useState<number | null>(null);
@@ -79,10 +82,10 @@ export function Cart({ onExplore, project }: { onExplore: () => void; project?: 
       ) : (
         <>
           <View style={styles.summary}>
-            <Row label="Produtos" value={data!.total_price} />
-            <Row label="Frete estimado" value={data!.total_freight} />
+            <Row styles={styles} colors={colors} label="Produtos" value={data!.total_price} />
+            <Row styles={styles} colors={colors} label="Frete estimado" value={data!.total_freight} />
             <View style={styles.divider} />
-            <Row label="Total" value={data!.grand_total} bold />
+            <Row styles={styles} colors={colors} label="Total" value={data!.grand_total} bold />
             {data!.stores.length > 1 ? (
               <View style={styles.savingsBadge}>
                 <Icon name="sparkles-outline" size={12} color={colors.green} />
@@ -140,7 +143,7 @@ export function Cart({ onExplore, project }: { onExplore: () => void; project?: 
   );
 }
 
-function Row({ label, value, bold }: { label: string; value: number; bold?: boolean }) {
+function Row({ label, value, bold, styles, colors }: { label: string; value: number; bold?: boolean; styles: any; colors: typeof lightColors }) {
   return (
     <View style={styles.row}>
       <Text style={[styles.rowLabel, bold && { color: colors.ink, fontWeight: "700" }]}>{label}</Text>
@@ -151,7 +154,8 @@ function Row({ label, value, bold }: { label: string; value: number; bold?: bool
   );
 }
 
-const styles = StyleSheet.create({
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
   empty: { alignItems: "center", marginTop: 60, paddingHorizontal: 30 },
   emptyTitle: { color: colors.ink, fontSize: 20, fontWeight: "700", marginTop: 15 },
   emptyText: { color: colors.muted, fontSize: 13, marginTop: 8, textAlign: "center", lineHeight: 20 },
@@ -162,7 +166,7 @@ const styles = StyleSheet.create({
   rowLabel: { color: colors.muted, fontSize: 13, fontWeight: "600" },
   rowValue: { color: colors.ink, fontSize: 14, fontWeight: "700" },
   divider: { height: 1, backgroundColor: colors.line, marginVertical: 8 },
-  savingsBadge: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, padding: 8, backgroundColor: "#E7F3E7", borderRadius: 8 },
+  savingsBadge: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8, padding: 8, backgroundColor: colors.pale, borderRadius: 8 },
   savingsText: { color: colors.green, fontSize: 11, fontWeight: "600", flex: 1 },
   progressCard: { backgroundColor: colors.white, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.line },
   progressHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
@@ -184,3 +188,4 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "column", gap: 6 },
   iconBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" },
 });
+}

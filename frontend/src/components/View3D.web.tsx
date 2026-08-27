@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 import { Icon } from "@/src/components/UI";
 import { build3DHtml } from "@/src/utils/build3d";
 import type { Project } from "@/src/types";
@@ -9,6 +10,8 @@ import type { Project } from "@/src/types";
 // Web build uses a native <iframe> since react-native-webview doesn't render on web.
 // Metro auto-picks this file when bundling for web.
 export function View3D({ project, onBack }: { project: Project; onBack: () => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const html = useMemo(() => build3DHtml(project), [project]);
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -26,14 +29,15 @@ export function View3D({ project, onBack }: { project: Project; onBack: () => vo
         <iframe
           srcDoc={html}
           title="3D preview"
-          style={{ width: "100%", height: "100%", border: "none", background: "#F8F7F4" }}
+          style={{ width: "100%", height: "100%", border: "none", background: colors.bg }}
         />
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   topBar: {
     flexDirection: "row",
@@ -48,5 +52,6 @@ const styles = StyleSheet.create({
   back: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -8 },
   title: { color: colors.ink, fontSize: 17, fontWeight: "700" },
   subtitle: { color: colors.muted, fontSize: 12, marginTop: 2 },
-  frameWrap: { flex: 1, backgroundColor: "#F8F7F4" },
+  frameWrap: { flex: 1, backgroundColor: colors.bg },
 });
+}

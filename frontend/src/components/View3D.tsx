@@ -4,12 +4,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 import { Icon } from "@/src/components/UI";
 import { build3DHtml } from "@/src/utils/build3d";
 import type { Project } from "@/src/types";
 
 export function View3D({ project, onBack }: { project: Project; onBack: () => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const html = useMemo(() => build3DHtml(project), [project]);
   const [sharing, setSharing] = useState(false);
 
@@ -70,7 +73,8 @@ export function View3D({ project, onBack }: { project: Project; onBack: () => vo
   );
 }
 
-const styles = StyleSheet.create({
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   topBar: {
     flexDirection: "row",
@@ -86,8 +90,9 @@ const styles = StyleSheet.create({
   back: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -8 },
   title: { color: colors.ink, fontSize: 17, fontWeight: "700" },
   subtitle: { color: colors.muted, fontSize: 12, marginTop: 2 },
-  web: { flex: 1, backgroundColor: "#F8F7F4" },
+  web: { flex: 1, backgroundColor: colors.bg },
   loading: { position: "absolute", inset: 0 as any, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
   loadingText: { color: colors.muted, fontSize: 13, fontWeight: "600" },
   sharingOverlay: { position: "absolute", top: "45%", alignSelf: "center", backgroundColor: colors.bg, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.line },
 });
+}

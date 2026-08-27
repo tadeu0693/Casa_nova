@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { request } from "@/src/api";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
 import { Button, Field, Icon, Screen } from "@/src/components/UI";
 
 export function ChangePassword({ onBack, onDone }: { onBack: () => void; onDone: () => void }) {
+  const { colors } = useTheme();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

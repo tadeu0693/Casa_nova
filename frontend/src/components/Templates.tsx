@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { request } from "@/src/api";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 import { Header, Icon, Screen } from "@/src/components/UI";
 import type { Project } from "@/src/types";
 
@@ -17,6 +18,8 @@ type Template = {
 };
 
 export function Templates({ onPick, onBack }: { onPick: (project: Project) => void; onBack: () => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const [items, setItems] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -101,45 +104,47 @@ export function Templates({ onPick, onBack }: { onPick: (project: Project) => vo
   );
 }
 
-const styles = StyleSheet.create({
-  top: { flexDirection: "row", marginBottom: 4 },
-  back: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -8 },
-  empty: { alignItems: "center", marginTop: 60, padding: 20 },
-  emptyText: { color: colors.muted, marginTop: 10, textAlign: "center" },
-  card: {
-    flexDirection: "row",
-    gap: 14,
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
-    marginBottom: 12,
-    alignItems: "center",
-  },
-  iconBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: colors.pale,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cardHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  cardTitle: { color: colors.ink, fontWeight: "700", fontSize: 15, flex: 1 },
-  cardArea: { color: colors.brand, fontWeight: "700", fontSize: 13 },
-  cardDesc: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 4 },
-  roomsRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 8 },
-  roomChip: { backgroundColor: colors.card, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  roomChipText: { fontSize: 10, color: colors.ink, fontWeight: "600" },
-  hint: {
-    flexDirection: "row",
-    gap: 8,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#E8F0F2",
-    marginTop: 8,
-    alignItems: "flex-start",
-  },
-  hintText: { color: colors.blue, fontSize: 12, lineHeight: 18, flex: 1 },
-});
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
+    top: { flexDirection: "row", marginBottom: 4 },
+    back: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -8 },
+    empty: { alignItems: "center", marginTop: 60, padding: 20 },
+    emptyText: { color: colors.muted, marginTop: 10, textAlign: "center" },
+    card: {
+      flexDirection: "row",
+      gap: 14,
+      padding: 14,
+      borderRadius: 16,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.line,
+      marginBottom: 12,
+      alignItems: "center",
+    },
+    iconBox: {
+      width: 52,
+      height: 52,
+      borderRadius: 14,
+      backgroundColor: colors.pale,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    cardHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    cardTitle: { color: colors.ink, fontWeight: "700", fontSize: 15, flex: 1 },
+    cardArea: { color: colors.brand, fontWeight: "700", fontSize: 13 },
+    cardDesc: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 4 },
+    roomsRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 8 },
+    roomChip: { backgroundColor: colors.bg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+    roomChipText: { fontSize: 10, color: colors.ink, fontWeight: "600" },
+    hint: {
+      flexDirection: "row",
+      gap: 8,
+      padding: 12,
+      borderRadius: 10,
+      backgroundColor: colors.pale,
+      marginTop: 8,
+      alignItems: "flex-start",
+    },
+    hintText: { color: colors.blue, fontSize: 12, lineHeight: 18, flex: 1 },
+  });
+}

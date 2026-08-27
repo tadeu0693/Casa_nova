@@ -1,17 +1,20 @@
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { KeyboardAvoidingView, Linking as RNLinking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { storage } from "@/src/utils/storage";
 import { request, TOKEN_KEY } from "@/src/api";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 import { Button, Field, Icon } from "@/src/components/UI";
 import type { User } from "@/src/types";
 
 WebBrowser.maybeCompleteAuthSession();
 
 export function Auth({ onLogged }: { onLogged: (u: User) => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [forgotStep, setForgotStep] = useState<"request" | "reset">("request");
   const [email, setEmail] = useState("");
@@ -181,7 +184,8 @@ export function Auth({ onLogged }: { onLogged: (u: User) => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   wrap: { padding: 28, paddingTop: 58, paddingBottom: 40 },
@@ -198,4 +202,5 @@ const styles = StyleSheet.create({
   forgotLink: { alignSelf: "flex-end", marginTop: 10, minHeight: 30, justifyContent: "center" },
   forgotLinkText: { color: colors.brand, fontWeight: "700", fontSize: 13 },
   infoText: { color: colors.muted, fontSize: 13, marginTop: 14, lineHeight: 19 },
-});
+  });
+}

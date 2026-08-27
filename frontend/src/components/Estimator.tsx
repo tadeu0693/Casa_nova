@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { API, TOKEN_KEY, request } from "@/src/api";
 import { storage } from "@/src/utils/storage";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 import { Button, Header, Icon, Screen } from "@/src/components/UI";
 import type { Project } from "@/src/types";
 
@@ -26,6 +27,8 @@ export function Estimator({
   onOffers: () => void;
   onSearchMaterial: (query: string) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const [data, setData] = useState<EstimateData | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"materials" | "rooms">("materials");
@@ -178,14 +181,15 @@ export function Estimator({
   );
 }
 
-const styles = StyleSheet.create({
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
   total: { backgroundColor: colors.ink, borderRadius: 17, padding: 21, marginBottom: 20 },
   totalLabel: { color: colors.dim, fontSize: 11, fontWeight: "700", letterSpacing: 1.1 },
   totalValue: { color: "#fff", fontSize: 29, fontWeight: "700", marginTop: 8 },
   totalNote: { color: colors.dim, fontSize: 12, marginTop: 7 },
   segment: { flexDirection: "row", backgroundColor: colors.card, borderRadius: 12, padding: 4, marginBottom: 14 },
   segBtn: { flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: 9 },
-  segBtnActive: { backgroundColor: colors.white },
+  segBtnActive: { backgroundColor: colors.bg },
   segTxt: { color: colors.muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.8 },
   segTxtActive: { color: colors.brand },
   material: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, borderBottomWidth: 1, borderColor: colors.line },
@@ -208,3 +212,4 @@ const styles = StyleSheet.create({
   exportBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 10, paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: colors.line },
   exportBtnText: { color: colors.brand, fontWeight: "700", fontSize: 14 },
 });
+}

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 import { Button, Chip, Field, Header, Icon, Screen } from "@/src/components/UI";
 import type { Room } from "@/src/types";
 
@@ -97,6 +98,8 @@ export function Builder({
   onDone: (p: { name: string; build_type: string; width: number; length: number; rooms: Room[] }) => void;
   initial?: { name: string; build_type: string; width: number; length: number; rooms: Room[] } | null;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const [type, setType] = useState(initial?.build_type || "Casa térrea");
   const [width, setWidth] = useState(String(initial?.width || 8));
   const [length, setLength] = useState(String(initial?.length || 12));
@@ -332,7 +335,8 @@ export function Builder({
   );
 }
 
-const styles = StyleSheet.create({
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
   progress: { fontSize: 11, color: colors.muted, letterSpacing: 1.3, marginBottom: 20, fontWeight: "700" },
   formTitle: { fontSize: 18, fontWeight: "700", color: colors.ink, marginTop: 20 },
   body: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 7 },
@@ -343,9 +347,9 @@ const styles = StyleSheet.create({
   areaValue: { color: colors.ink, fontSize: 20, fontWeight: "700", marginTop: 4 },
   addChip: { flexDirection: "row", gap: 4, height: 36, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.brand, borderRadius: 999, alignItems: "center", backgroundColor: colors.pale, flexShrink: 0 },
   addChipText: { color: colors.brand, fontWeight: "700", fontSize: 12 },
-  roomCard: { backgroundColor: colors.white, borderRadius: 14, padding: 14, marginTop: 12, borderWidth: 1, borderColor: colors.line },
+  roomCard: { backgroundColor: colors.card, borderRadius: 14, padding: 14, marginTop: 12, borderWidth: 1, borderColor: colors.line },
   floorGroupLabel: { color: colors.brand, fontWeight: "700", fontSize: 12, letterSpacing: 0.5, marginTop: 18, textTransform: "uppercase" },
-  descriptionInput: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 14, minHeight: 70, color: colors.ink, textAlignVertical: "top", marginBottom: 12 },
+  descriptionInput: { backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.line, padding: 14, minHeight: 70, color: colors.ink, textAlignVertical: "top", marginBottom: 12 },
   floorWarnBox: { flexDirection: "row", gap: 8, backgroundColor: colors.pale, borderRadius: 12, padding: 12, marginBottom: 10, alignItems: "flex-start" },
   floorWarnText: { flex: 1, color: colors.brandDark, fontSize: 12, lineHeight: 17 },
   floorActiveLabel: { color: colors.muted, fontSize: 12, marginTop: 8, fontStyle: "italic" },
@@ -354,7 +358,8 @@ const styles = StyleSheet.create({
   dimRow: { flexDirection: "row", gap: 8, marginTop: 12 },
   dim: { flex: 1 },
   dimLabel: { color: colors.muted, fontSize: 10, fontWeight: "700", marginBottom: 4 },
-  dimInput: { height: 40, borderWidth: 1, borderColor: colors.line, borderRadius: 8, paddingHorizontal: 10, color: colors.ink, fontSize: 14, backgroundColor: colors.white },
+  dimInput: { height: 40, borderWidth: 1, borderColor: colors.line, borderRadius: 8, paddingHorizontal: 10, color: colors.ink, fontSize: 14, backgroundColor: colors.card },
   dimReadonly: { height: 40, borderRadius: 8, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" },
   dimReadonlyText: { color: colors.ink, fontWeight: "700", fontSize: 13 },
 });
+}

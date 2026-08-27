@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { request } from "@/src/api";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 import { Chip, Header, Icon, Screen } from "@/src/components/UI";
 import type { CepData, Offer } from "@/src/types";
 
@@ -19,6 +20,8 @@ export function Offers({
   onAddToCart: (offer: Offer) => void;
   initialQuery?: string;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const [q, setQ] = useState(initialQuery || "cimento");
   const [offers, setOffers] = useState<Offer[]>([]);
   const [partners, setPartners] = useState<Offer[]>([]);
@@ -224,13 +227,14 @@ export function Offers({
   );
 }
 
-const styles = StyleSheet.create({
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
   cepBar: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.pale, padding: 12, borderRadius: 12, marginBottom: 12 },
   cepBarText: { color: colors.ink, fontSize: 12, flex: 1, fontWeight: "600" },
-  search: { height: 52, borderWidth: 1, borderColor: colors.line, borderRadius: 13, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, gap: 10, backgroundColor: "#fff", marginBottom: 12 },
+  search: { height: 52, borderWidth: 1, borderColor: colors.line, borderRadius: 13, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, gap: 10, backgroundColor: colors.card, marginBottom: 12 },
   searchInput: { flex: 1, fontSize: 15, color: colors.ink },
   chipRow: { gap: 8, paddingHorizontal: 2, paddingVertical: 6 },
-  errorBox: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, backgroundColor: "#FEF3E4", borderRadius: 10, marginTop: 8 },
+  errorBox: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, backgroundColor: colors.pale, borderRadius: 10, marginTop: 8 },
   errorText: { color: colors.ink, flex: 1, fontSize: 12 },
   retry: { color: colors.brand, fontWeight: "700", fontSize: 12 },
   empty: { alignItems: "center", marginTop: 60, paddingHorizontal: 30 },
@@ -249,7 +253,7 @@ const styles = StyleSheet.create({
   addBtnText: { color: colors.brand, fontSize: 12, fontWeight: "700" },
   partnerHeadRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 24, marginBottom: 4 },
   partnerTitle: { color: colors.ink, fontSize: 15, fontWeight: "700" },
-  refBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#E8F0F2", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  refBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: colors.pale, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   refBadgeText: { color: colors.blue, fontSize: 11, fontWeight: "700" },
   refNote: { color: colors.muted, fontSize: 11, marginBottom: 10, lineHeight: 16, fontStyle: "italic" },
   partner: { flexDirection: "row", gap: 12, alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.line },
@@ -261,3 +265,4 @@ const styles = StyleSheet.create({
   partnerEstPrice: { color: colors.green, fontWeight: "700", fontSize: 14, marginTop: 2 },
   disclaimer: { color: colors.muted, fontSize: 10, marginTop: 12, textAlign: "center", lineHeight: 15, fontStyle: "italic" },
 });
+}

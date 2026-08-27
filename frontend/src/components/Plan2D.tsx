@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 import { Button, Header, Icon, Screen } from "@/src/components/UI";
 import type { Room } from "@/src/types";
 
@@ -31,6 +32,8 @@ export function Plan2D({
   saving?: boolean;
   onView3D?: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const [containerW, setContainerW] = useState(340);
   const [rooms, setRooms] = useState<Room[]>(
     project.rooms.map((r, i) => ({
@@ -129,7 +132,7 @@ export function Plan2D({
           onLayout={(e) => setContainerW(e.nativeEvent.layout.width)}
           style={styles.canvas}
         >
-          <Grid width={project.width} length={project.length} scale={scale} />
+          <Grid width={project.width} length={project.length} scale={scale} styles={styles} />
           {visibleIndices.map((i) => (
             <DraggableRoom
               key={`${rooms[i].name}-${i}`}
@@ -141,6 +144,8 @@ export function Plan2D({
               selected={selected === i}
               onSelect={() => setSelected(i)}
               onCommit={(patch) => updateRoom(i, patch)}
+              styles={styles}
+              colors={colors}
             />
           ))}
           <Text style={styles.canvasScaleLabel}>Escala: 1m ≈ {Math.round(scale)}px</Text>
@@ -156,8 +161,8 @@ export function Plan2D({
               </Text>
             </View>
             <View style={styles.ctrlRow}>
-              <CtrlPair label="Largura" value={rooms[selected].width} onMinus={() => nudge(selected, "width", -0.5)} onPlus={() => nudge(selected, "width", 0.5)} testID="ctrl-width" />
-              <CtrlPair label="Comprimento" value={rooms[selected].length} onMinus={() => nudge(selected, "length", -0.5)} onPlus={() => nudge(selected, "length", 0.5)} testID="ctrl-length" />
+              <CtrlPair colors={colors} styles={styles} label="Largura" value={rooms[selected].width} onMinus={() => nudge(selected, "width", -0.5)} onPlus={() => nudge(selected, "width", 0.5)} testID="ctrl-width" />
+              <CtrlPair colors={colors} styles={styles} label="Comprimento" value={rooms[selected].length} onMinus={() => nudge(selected, "length", -0.5)} onPlus={() => nudge(selected, "length", 0.5)} testID="ctrl-length" />
             </View>
           </View>
         )}
@@ -175,7 +180,7 @@ export function Plan2D({
   );
 }
 
-function CtrlPair({ label, value, onMinus, onPlus, testID }: { label: string; value: number; onMinus: () => void; onPlus: () => void; testID: string }) {
+function CtrlPair({ label, value, onMinus, onPlus, testID, colors, styles }: { label: string; value: number; onMinus: () => void; onPlus: () => void; testID: string; colors: typeof lightColors; styles: any }) {
   return (
     <View style={styles.ctrlBox}>
       <Text style={styles.ctrlLabel}>{label}</Text>
@@ -192,7 +197,7 @@ function CtrlPair({ label, value, onMinus, onPlus, testID }: { label: string; va
   );
 }
 
-function Grid({ width, length, scale }: { width: number; length: number; scale: number }) {
+function Grid({ width, length, scale, styles }: { width: number; length: number; scale: number; styles: any }) {
   const cols = Math.ceil(width);
   const rows = Math.ceil(length);
   return (
@@ -216,6 +221,8 @@ function DraggableRoom({
   selected,
   onSelect,
   onCommit,
+  colors,
+  styles,
 }: {
   room: Room;
   index: number;
@@ -225,6 +232,8 @@ function DraggableRoom({
   selected: boolean;
   onSelect: () => void;
   onCommit: (patch: Partial<Room>) => void;
+  colors: typeof lightColors;
+  styles: any;
 }) {
   const startX = (room.x || 0) * scale;
   const startY = (room.y || 0) * scale;
@@ -288,9 +297,10 @@ function DraggableRoom({
   );
 }
 
-const styles = StyleSheet.create({
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
   view3dBar: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.pale, padding: 12, borderRadius: 12, marginBottom: 14 },
-  view3dIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.white, alignItems: "center", justifyContent: "center" },
+  view3dIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.card, alignItems: "center", justifyContent: "center" },
   view3dTitle: { color: colors.brand, fontWeight: "700", fontSize: 14 },
   view3dText: { color: colors.muted, fontSize: 11, marginTop: 2 },
   floorTabs: { flexDirection: "row", gap: 8, marginBottom: 12 },
@@ -307,14 +317,14 @@ const styles = StyleSheet.create({
   legendText: { color: colors.muted, fontSize: 11, fontWeight: "600" },
   canvas: {
     height: CANVAS_HEIGHT,
-    backgroundColor: "#F1EFEA",
+    backgroundColor: colors.card,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.line,
     overflow: "hidden",
     marginBottom: 16,
   },
-  gridLine: { position: "absolute", backgroundColor: "#D9D5CE" },
+  gridLine: { position: "absolute", backgroundColor: colors.line },
   canvasScaleLabel: { position: "absolute", bottom: 8, right: 12, fontSize: 10, color: colors.muted, fontWeight: "600" },
   room: {
     position: "absolute",
@@ -324,7 +334,7 @@ const styles = StyleSheet.create({
   },
   roomLabel: { color: colors.ink, fontSize: 12, fontWeight: "700", textAlign: "center", paddingHorizontal: 4 },
   roomDim: { color: colors.ink, opacity: 0.6, fontSize: 10, marginTop: 2, fontWeight: "600" },
-  selectedCard: { backgroundColor: colors.white, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.line },
+  selectedCard: { backgroundColor: colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.line },
   selectedHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   dot: { width: 10, height: 10, borderRadius: 5 },
   selectedTitle: { color: colors.ink, fontWeight: "700", fontSize: 15, flex: 1 },
@@ -337,3 +347,4 @@ const styles = StyleSheet.create({
   ctrlValue: { color: colors.ink, fontWeight: "700", fontSize: 14 },
   actionsRow: { flexDirection: "row", gap: 10, marginTop: 4 },
 });
+}

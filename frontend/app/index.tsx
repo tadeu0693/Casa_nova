@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { storage } from "@/src/utils/storage";
 import { request, TOKEN_KEY } from "@/src/api";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
 import { Icon } from "@/src/components/UI";
 import { Auth } from "@/src/components/Auth";
 import { Home } from "@/src/components/Home";
@@ -18,16 +18,22 @@ import { Alerts } from "@/src/components/Alerts";
 import { Projects } from "@/src/components/Projects";
 import { View3D } from "@/src/components/View3D";
 import { CepModal } from "@/src/components/CepModal";
+import { Onboarding } from "@/src/components/Onboarding";
 import type { CepData, Offer, Project, User } from "@/src/types";
+import type { lightColors } from "@/src/theme";
 
 const CEP_KEY = "constroi_facil_cep";
+const ONBOARDING_KEY = "constroi_facil_onboarding_seen";
 
 export default function Index() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
   const [tab, setTab] = useState<"home" | "builder" | "plan" | "3d" | "estimate" | "offers" | "cart" | "templates" | "alerts" | "projects" | "change-password">("home");
   const [project, setProject] = useState<Project | null>(null);
   const [cep, setCep] = useState<CepData | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [showCepModal, setShowCepModal] = useState(false);
   const [savingLayout, setSavingLayout] = useState(false);
   const [offerQuery, setOfferQuery] = useState<string | undefined>(undefined);
@@ -45,6 +51,19 @@ export default function Index() {
         .finally(() => setChecking(false));
     })();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const seen = await storage.getItem<string>(ONBOARDING_KEY, "");
+      if (!seen) setShowOnboarding(true);
+    })();
+  }, [user]);
+
+  const dismissOnboarding = async () => {
+    setShowOnboarding(false);
+    await storage.setItem(ONBOARDING_KEY, "1");
+  };
 
   const handleLogout = async () => {
     await storage.secureRemove(TOKEN_KEY);
@@ -255,42 +274,45 @@ export default function Index() {
         onSaved={saveCep}
         currentCep={cep?.cep || null}
       />
+      <Onboarding visible={showOnboarding} onDone={dismissOnboarding} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.bg },
-  loading: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
-  tabbar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 83,
-    paddingBottom: 17,
-    paddingTop: 10,
-    backgroundColor: "rgba(248,247,244,.97)",
-    borderTopWidth: 1,
-    borderColor: colors.line,
-    flexDirection: "row",
-    justifyContent: "space-around",
-  },
-  tab: { alignItems: "center", justifyContent: "center", minWidth: 65, gap: 4 },
-  tabText: { color: colors.muted, fontSize: 11 },
-  tabTextActive: { color: colors.brand, fontWeight: "700" },
-  toast: {
-    position: "absolute",
-    bottom: 100,
-    left: 20,
-    right: 20,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: colors.ink,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    zIndex: 10,
-  },
-  toastText: { color: "#fff", fontWeight: "600", fontSize: 13, flex: 1 },
-});
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
+    flex: { flex: 1, backgroundColor: colors.bg },
+    loading: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
+    tabbar: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: 83,
+      paddingBottom: 17,
+      paddingTop: 10,
+      backgroundColor: colors.bg,
+      borderTopWidth: 1,
+      borderColor: colors.line,
+      flexDirection: "row",
+      justifyContent: "space-around",
+    },
+    tab: { alignItems: "center", justifyContent: "center", minWidth: 65, gap: 4 },
+    tabText: { color: colors.muted, fontSize: 11 },
+    tabTextActive: { color: colors.brand, fontWeight: "700" },
+    toast: {
+      position: "absolute",
+      bottom: 100,
+      left: 20,
+      right: 20,
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: colors.ink,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      zIndex: 10,
+    },
+    toastText: { color: "#fff", fontWeight: "600", fontSize: 13, flex: 1 },
+  });
+}

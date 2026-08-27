@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { request } from "@/src/api";
-import { colors } from "@/src/theme";
+import { useTheme } from "@/src/utils/ThemeContext";
+import type { lightColors } from "@/src/theme";
 import { Button, Header, Icon, Screen } from "@/src/components/UI";
 import type { Project } from "@/src/types";
 
@@ -26,6 +27,8 @@ export function Projects({
   onNew: () => void;
   onTemplates: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   const [items, setItems] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<Project | null>(null);
@@ -164,6 +167,8 @@ function ConfirmDelete({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => buildStyles(colors), [colors]);
   return (
     <Modal visible={!!project} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
@@ -186,54 +191,56 @@ function ConfirmDelete({
   );
 }
 
-const styles = StyleSheet.create({
-  top: { flexDirection: "row", marginBottom: 4 },
-  back: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -8 },
-  actionsRow: { flexDirection: "row", gap: 10, marginBottom: 18 },
-  actionBtn: {
-    flex: 1,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: colors.pale,
-  },
-  actionText: { color: colors.brand, fontWeight: "700", fontSize: 13 },
-  empty: { alignItems: "center", marginTop: 60, paddingHorizontal: 30 },
-  emptyTitle: { color: colors.ink, fontSize: 18, fontWeight: "700", marginTop: 15 },
-  emptyText: { color: colors.muted, fontSize: 13, marginTop: 8, textAlign: "center", lineHeight: 20 },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
-    marginBottom: 10,
-    paddingRight: 12,
-  },
-  cardBody: { flex: 1, flexDirection: "row", alignItems: "center", padding: 14, gap: 12 },
-  iconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: colors.pale,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cardTitle: { color: colors.ink, fontWeight: "700", fontSize: 15 },
-  cardMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
-  cardDate: { color: colors.muted, fontSize: 11, marginTop: 2, fontStyle: "italic" },
-  cardActions: { flexDirection: "row", gap: 4, paddingRight: 4 },
-  iconBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 8 },
-  trashBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 8 },
-  backdrop: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,.5)", padding: 24 },
-  confirm: { backgroundColor: colors.bg, borderRadius: 16, padding: 24, width: "100%", maxWidth: 340 },
-  warnIcon: { alignSelf: "center", width: 56, height: 56, borderRadius: 28, backgroundColor: "#FBEAEC", alignItems: "center", justifyContent: "center", marginBottom: 12 },
-  confirmTitle: { color: colors.ink, fontSize: 18, fontWeight: "700", textAlign: "center" },
-  confirmBody: { color: colors.muted, fontSize: 13, textAlign: "center", marginTop: 8, lineHeight: 20 },
-  cancel: { alignItems: "center", paddingVertical: 12 },
-  cancelText: { color: colors.muted, fontWeight: "700" },
-});
+function buildStyles(colors: typeof lightColors) {
+  return StyleSheet.create({
+    top: { flexDirection: "row", marginBottom: 4 },
+    back: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -8 },
+    actionsRow: { flexDirection: "row", gap: 10, marginBottom: 18 },
+    actionBtn: {
+      flex: 1,
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 12,
+      borderRadius: 12,
+      backgroundColor: colors.pale,
+    },
+    actionText: { color: colors.brand, fontWeight: "700", fontSize: 13 },
+    empty: { alignItems: "center", marginTop: 60, paddingHorizontal: 30 },
+    emptyTitle: { color: colors.ink, fontSize: 18, fontWeight: "700", marginTop: 15 },
+    emptyText: { color: colors.muted, fontSize: 13, marginTop: 8, textAlign: "center", lineHeight: 20 },
+    card: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.line,
+      marginBottom: 10,
+      paddingRight: 12,
+    },
+    cardBody: { flex: 1, flexDirection: "row", alignItems: "center", padding: 14, gap: 12 },
+    iconBox: {
+      width: 46,
+      height: 46,
+      borderRadius: 12,
+      backgroundColor: colors.pale,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    cardTitle: { color: colors.ink, fontWeight: "700", fontSize: 15 },
+    cardMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
+    cardDate: { color: colors.muted, fontSize: 11, marginTop: 2, fontStyle: "italic" },
+    cardActions: { flexDirection: "row", gap: 4, paddingRight: 4 },
+    iconBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 8 },
+    trashBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: 8 },
+    backdrop: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,.5)", padding: 24 },
+    confirm: { backgroundColor: colors.bg, borderRadius: 16, padding: 24, width: "100%", maxWidth: 340 },
+    warnIcon: { alignSelf: "center", width: 56, height: 56, borderRadius: 28, backgroundColor: colors.pale, alignItems: "center", justifyContent: "center", marginBottom: 12 },
+    confirmTitle: { color: colors.ink, fontSize: 18, fontWeight: "700", textAlign: "center" },
+    confirmBody: { color: colors.muted, fontSize: 13, textAlign: "center", marginTop: 8, lineHeight: 20 },
+    cancel: { alignItems: "center", paddingVertical: 12 },
+    cancelText: { color: colors.muted, fontWeight: "700" },
+  });
+}
