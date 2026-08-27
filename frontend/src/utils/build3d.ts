@@ -262,7 +262,7 @@ export function build3DHtml(project: Project): string {
         if (orientation === 'v') {
           group.add(addWall(coord, baseY, mid, WALL_T, WALL_H, length, mat));
         } else {
-          group.add(addWall(mid, coord, length, WALL_H, WALL_T, mat));
+          group.add(addWall(mid, baseY, coord, length, WALL_H, WALL_T, mat));
         }
       });
     });

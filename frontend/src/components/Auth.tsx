@@ -89,7 +89,7 @@ export function Auth({ onLogged }: { onLogged: (u: User) => void }) {
         return;
       }
       const result = await WebBrowser.openAuthSessionAsync(`https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirect)}`, redirect);
-      const url = result.url || (await RNLinking.getInitialURL());
+      const url = (result.type === "success" ? result.url : undefined) || (await RNLinking.getInitialURL());
       const match = url?.match(/[?#&]session_id=([^&#]+)/);
       if (!match) throw new Error("Login Google cancelado");
       const data = await request("/auth/session", { method: "POST", body: JSON.stringify({ session_id: decodeURIComponent(match[1]) }) });

@@ -25,7 +25,6 @@ export function View3D({ project, onBack }: { project: Project; onBack: () => vo
         </View>
       </View>
       <View style={styles.frameWrap} testID="view3d-iframe">
-        {/* @ts-expect-error web iframe */}
         <iframe
           srcDoc={html}
           title="3D preview"

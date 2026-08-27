@@ -116,7 +116,13 @@ class AlertInput(BaseModel):
 
 
 def clean(doc: Dict[str, Any]) -> Dict[str, Any]:
+    # Strips fields that should never reach the client. password_hash only exists on
+    # user documents (harmless no-op for projects/alerts/etc.), but without this,
+    # every /auth/me call and every login response was sending the bcrypt hash of
+    # the person's password straight to the app — never actually used there, and
+    # exactly the kind of thing that shouldn't leave the server.
     doc.pop("_id", None)
+    doc.pop("password_hash", None)
     return doc
 
 
@@ -454,13 +460,18 @@ def _build_project_pdf(project: Dict[str, Any], rooms: List[Room], est: Dict[str
         used_h = span_y * scale
         origin_x = pdf.get_x() + (draw_w - used_w) / 2
         origin_y = pdf.get_y()
+        # Center the room drawing vertically within the reserved box too (origin_x
+        # already centers it horizontally) — previously only the horizontal offset
+        # was applied, so short/wide floor plans looked pinned to the top instead
+        # of centered in their card.
+        content_origin_y = origin_y + (draw_h - used_h) / 2
 
         pdf.set_fill_color(*CARD)
         pdf.rect(pdf.get_x(), origin_y, draw_w, draw_h, style="F")
 
         for r in floor_rooms:
             rx = origin_x + (r.x - min_x) * scale
-            ry = origin_y + (r.y - min_y) * scale
+            ry = content_origin_y + (r.y - min_y) * scale
             rw = max(r.width * scale, 2)
             rl = max(r.length * scale, 2)
             pdf.set_draw_color(*BRAND)
@@ -906,19 +917,8 @@ async def _fetch_leroy_price(query: str, ua_headers: Dict[str, str]) -> Any:
         return None, f"{type(e).__name__}: {e}"[:300]
 
 
-@api.get("/offers")
-async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
-    """Aggregate offers: Mercado Livre API results + deep-link search URLs for
-    Leroy Merlin and C&C (public search endpoints). Freight is estimated based on UF."""
-    query = re.sub(r"[^\w\s-]", "", q, flags=re.UNICODE)[:80] or "cimento"
+async def _fetch_mercadolivre(query: str, uf: str, ua_headers: Dict[str, str]):
     ml_offers: List[Dict[str, Any]] = []
-    error: Optional[str] = None
-    error_detail: Optional[str] = None
-    ua_headers = {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "pt-BR,pt;q=0.9",
-    }
     try:
         response = await asyncio.to_thread(
             requests.get,
@@ -942,24 +942,44 @@ async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
                 "freight": _freight_for(uf.upper(), price) if uf else 0.0,
                 "freight_days": FREIGHT_TABLE.get(uf.upper(), {}).get("days") if uf else None,
             })
+        return ml_offers, None, None
     except requests.RequestException as e:
-        error = "Não foi possível consultar o Mercado Livre agora"
-        error_detail = f"{type(e).__name__}: {e}"[:300]
+        return [], "Não foi possível consultar o Mercado Livre agora", f"{type(e).__name__}: {e}"[:300]
 
-    # Best-effort real price straight from Leroy Merlin's own catalog (see docstring above
-    # for why this is "best effort" rather than a guaranteed official integration).
-    leroy_real, leroy_error_detail = await _fetch_leroy_price(query, ua_headers)
+
+@api.get("/offers")
+async def offers(q: str = "cimento", cep: str = "", uf: str = ""):
+    """Aggregate offers: Mercado Livre API results + deep-link search URLs for
+    Leroy Merlin and C&C (public search endpoints). Freight is estimated based on UF."""
+    query = re.sub(r"[^\w\s-]", "", q, flags=re.UNICODE)[:80] or "cimento"
+    ua_headers = {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "pt-BR,pt;q=0.9",
+    }
+
+    # All four lookups are independent of one another — run them concurrently so the
+    # total wait is only as long as the SLOWEST one (worst case ~12s), not the sum of
+    # all four one after another (which could add up to 30+ seconds).
+    encoded = quote_plus(query)
+    cec_url = f"https://www.cec.com.br/busca-produto?text={encoded}"
+    telha_url = f"https://www.telhanorte.com.br/s?q={encoded}"
+    (
+        (ml_offers, error, error_detail),
+        (leroy_real, leroy_error_detail),
+        (cec_real, cec_error_detail),
+        (telha_real, telha_error_detail),
+    ) = await asyncio.gather(
+        _fetch_mercadolivre(query, uf, ua_headers),
+        _fetch_leroy_price(query, ua_headers),
+        _fetch_price_by_scraping(cec_url, ua_headers),
+        _fetch_price_by_scraping(telha_url, ua_headers),
+    )
 
     # Reference median price per unit (BRL) — Brazilian construction market averages 2025.
     # Used to give the user a "typical range" when the marketplace API is unavailable
     # or as a benchmark to know whether a partner-store price is fair.
     ref = _reference_price(query, ml_offers)
-
-    encoded = quote_plus(query)
-    cec_url = f"https://www.cec.com.br/busca-produto?text={encoded}"
-    telha_url = f"https://www.telhanorte.com.br/s?q={encoded}"
-    cec_real, cec_error_detail = await _fetch_price_by_scraping(cec_url, ua_headers)
-    telha_real, telha_error_detail = await _fetch_price_by_scraping(telha_url, ua_headers)
 
     # Public search deep-links — we don't scrape, we surface the store's own search URL
     # so the user always sees fresh, real prices on the store's site.

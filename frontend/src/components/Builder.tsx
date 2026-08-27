@@ -1,3 +1,4 @@
+import type { Ionicons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useTheme } from "@/src/utils/ThemeContext";
@@ -11,7 +12,7 @@ const FLOORS = [
   { value: 1, label: "1º Andar" },
   { value: 2, label: "2º Andar" },
 ];
-const ROOM_TEMPLATES: { name: string; width: number; length: number; icon: keyof typeof import("@expo/vector-icons/build/Ionicons").Ionicons.glyphMap }[] = [
+const ROOM_TEMPLATES: { name: string; width: number; length: number; icon: keyof typeof Ionicons.glyphMap }[] = [
   { name: "Sala", width: 4, length: 5, icon: "tv-outline" },
   { name: "Cozinha", width: 3, length: 4, icon: "restaurant-outline" },
   { name: "Quarto", width: 3, length: 3.5, icon: "bed-outline" },
