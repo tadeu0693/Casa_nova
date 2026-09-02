@@ -169,7 +169,7 @@ export function Auth({ onLogged }: { onLogged: (u: User) => void }) {
               ) : null}
               <Button testID="auth-submit" title={loading ? "Entrando..." : mode === "login" ? "Entrar na minha conta" : "Criar conta"} onPress={submit} disabled={loading || !email || !password} />
               <Pressable testID="auth-google" style={styles.google} onPress={google}>
-                <Icon name="logo-google" size={18} color={colors.ink} />
+                <Icon name="logo-google" size={18} color={GOOGLE_INK} />
                 <Text style={styles.googleText}>Continuar com Google</Text>
               </Pressable>
               <Pressable testID="auth-switch" onPress={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setInfo(""); }} style={styles.switch}>
@@ -184,6 +184,11 @@ export function Auth({ onLogged }: { onLogged: (u: User) => void }) {
   );
 }
 
+// The Google button keeps a white background in both themes (Google's own brand
+// requirement), so its text and icon must be a FIXED dark tone. Using colors.ink here
+// made it near-white on white in dark mode — invisible.
+const GOOGLE_INK = "#3C4043";
+
 function buildStyles(colors: typeof lightColors) {
   return StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
@@ -193,8 +198,8 @@ function buildStyles(colors: typeof lightColors) {
   kicker: { color: colors.brand, fontSize: 12, letterSpacing: 1.7, fontWeight: "700" },
   heroTitle: { color: colors.ink, fontSize: 31, lineHeight: 37, fontWeight: "700", marginTop: 12 },
   subtle: { color: colors.muted, fontSize: 15, lineHeight: 22, marginTop: 7 },
-  google: { height: 50, borderWidth: 1, borderColor: colors.line, borderRadius: 12, marginTop: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10, backgroundColor: "#fff" },
-  googleText: { fontWeight: "700", color: colors.ink },
+  google: { height: 50, borderWidth: 1, borderColor: "#DADCE0", borderRadius: 12, marginTop: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10, backgroundColor: "#fff" },
+  googleText: { fontWeight: "700", fontSize: 15, color: GOOGLE_INK },
   switch: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 25, minHeight: 44 },
   switchText: { color: colors.brand, fontWeight: "700" },
   error: { backgroundColor: "#FBEAEC", padding: 12, borderRadius: 10, flexDirection: "row", gap: 8, marginTop: 18 },

@@ -10,6 +10,11 @@ import type { Room } from "@/src/types";
 const CANVAS_HEIGHT = 380;
 const PADDING = 12;
 
+// Room fills are fixed light pastels in BOTH themes, so the text on top of them must be
+// a fixed dark tone too. Using colors.ink made the labels near-white on pastel in dark
+// mode — the room names became impossible to read.
+const ROOM_INK = "#241F1A";
+
 const ROOM_COLORS = [
   { bg: "#FDE9DE", border: "#E28866" }, // terracotta
   { bg: "#E4EAE4", border: "#8FA88F" }, // sage
@@ -275,6 +280,13 @@ function DraggableRoom({
     transform: [{ translateX: tx.value + PADDING }, { translateY: ty.value + PADDING }],
   }));
 
+  // Type scales with the box: a 2x2 m room on a 25 m lot is barely 24 px wide, and a
+  // fixed 12 px label simply cannot fit inside it.
+  const boxW = room.width * scale;
+  const boxH = room.length * scale;
+  const labelSize = Math.max(8, Math.min(12, Math.floor(Math.min(boxW / 5.2, boxH / 3.2))));
+  const showDim = boxH > 42 && boxW > 52;
+
   return (
     <GestureDetector gesture={composed}>
       <Animated.View
@@ -290,8 +302,19 @@ function DraggableRoom({
           animatedStyle,
         ]}
       >
-        <Text style={styles.roomLabel}>{room.name}</Text>
-        <Text style={styles.roomDim}>{room.width}×{room.length}m</Text>
+        <Text
+          style={[styles.roomLabel, { fontSize: labelSize }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+        >
+          {room.name}
+        </Text>
+        {showDim ? (
+          <Text style={[styles.roomDim, { fontSize: labelSize - 2 }]} numberOfLines={1}>
+            {room.width}×{room.length}m
+          </Text>
+        ) : null}
       </Animated.View>
     </GestureDetector>
   );
@@ -331,9 +354,11 @@ function buildStyles(colors: typeof lightColors) {
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+    paddingHorizontal: 2,
   },
-  roomLabel: { color: colors.ink, fontSize: 12, fontWeight: "700", textAlign: "center", paddingHorizontal: 4 },
-  roomDim: { color: colors.ink, opacity: 0.6, fontSize: 10, marginTop: 2, fontWeight: "600" },
+  roomLabel: { color: ROOM_INK, fontWeight: "800", textAlign: "center" },
+  roomDim: { color: ROOM_INK, opacity: 0.72, fontWeight: "700", marginTop: 1, textAlign: "center" },
   selectedCard: { backgroundColor: colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.line },
   selectedHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   dot: { width: 10, height: 10, borderRadius: 5 },
