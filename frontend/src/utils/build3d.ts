@@ -77,12 +77,23 @@ export function build3DHtml(project: Project): string {
   #hud button.on{background:var(--brand);color:#fff}
   #hud button.share{background:var(--ink);color:#fff}
   #tip{position:fixed;top:56px;left:12px;right:12px;background:rgba(26,26,26,.7);color:#fff;font-size:11px;padding:7px 12px;border-radius:10px;font-weight:600;text-align:center;pointer-events:none;transition:opacity .6s;}
+  .lbl.tappable{pointer-events:auto;cursor:pointer;}
+  .lbl.tappable:active{background:var(--brand);}
+  #roomBar{position:fixed;left:12px;right:12px;bottom:12px;display:none;gap:10px;align-items:center;background:var(--glass);backdrop-filter:blur(10px);border-radius:14px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.12);}
+  #roomBar .info{flex:1;min-width:0;}
+  #roomBar #roomName{font-family:'Fraunces',serif;font-weight:700;font-size:15px;color:var(--brand-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #roomBar #roomMeta{font-size:11px;color:#5b5b5b;margin-top:2px;}
+  #roomBar button{background:var(--brand);color:#fff;border:none;font-weight:700;font-size:12px;padding:10px 16px;border-radius:999px;cursor:pointer;}
 </style>
 </head><body>
 <canvas id="app"></canvas>
 <div id="labels"></div>
 <div id="floorSwitch"></div>
-<div id="tip">Arraste para girar · pinça para dar zoom</div>
+<div id="tip">Arraste para girar · toque num cômodo para ver por dentro</div>
+<div id="roomBar">
+  <div class="info"><div id="roomName"></div><div id="roomMeta"></div></div>
+  <button id="btnBackRoom">‹ Voltar</button>
+</div>
 <div id="hud">
   <div class="kicker">${data.name}</div>
   <button id="btnRotate">▶ Girar</button>
@@ -192,7 +203,11 @@ export function build3DHtml(project: Project): string {
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.02;
   ground.receiveShadow = true;
-  scene.add(ground);
+  // Everything that belongs to the "outside world" (lawn, contact shadow, trees) lives
+  // in one group, so isolating a single room can hide the whole exterior in one go.
+  const worldDecor = new THREE.Group();
+  scene.add(worldDecor);
+  worldDecor.add(ground);
 
   // One group PER FLOOR, so we can show/hide floors independently (the floor switcher).
   const floorGroups = {}; // floorNum -> THREE.Group (walls, floor plane, props)
@@ -284,7 +299,7 @@ export function build3DHtml(project: Project): string {
     const blob = new THREE.Mesh(new THREE.PlaneGeometry(focusW * 1.6, focusL * 1.6), mat);
     blob.rotation.x = -Math.PI / 2;
     blob.position.set(focusX, -0.015, focusZ);
-    scene.add(blob);
+    worldDecor.add(blob);
   })();
 
   // A handful of simple trees scattered around the lot, avoiding the built footprint —
@@ -321,12 +336,225 @@ export function build3DHtml(project: Project): string {
       const clear = lotX < footprint.cx - footprint.w / 2 - 0.8 || lotX > footprint.cx + footprint.w / 2 + 0.8 ||
                     lotZ < footprint.cz - footprint.l / 2 - 0.8 || lotZ > footprint.cz + footprint.l / 2 + 0.8;
       if (clear && marginX > 2 && marginZ > 2) {
-        scene.add(tree(wx, wz, 0.85 + (i % 3) * 0.12));
+        worldDecor.add(tree(wx, wz, 0.85 + (i % 3) * 0.12));
       }
     });
   })();
 
+  // ---------------- Furniture library ----------------
+  // Each builder returns a THREE.Group whose origin is the CENTER of the room at floor
+  // level (y = 0). The same group is used twice: placed inside the full house, and
+  // rebuilt at the origin for the isolated single-room view. Sizes are clamped to the
+  // room, so a 2x2 m room doesn't get a 2.2 m sofa sticking through its walls.
+  const MAT = {
+    wood:      new THREE.MeshStandardMaterial({ color: '#a9764c', roughness: 0.75 }),
+    woodDark:  new THREE.MeshStandardMaterial({ color: '#6f4c33', roughness: 0.8 }),
+    fabric:    new THREE.MeshStandardMaterial({ color: '#8a7f74', roughness: 0.95 }),
+    fabricAlt: new THREE.MeshStandardMaterial({ color: '#6d7f83', roughness: 0.95 }),
+    linen:     new THREE.MeshStandardMaterial({ color: '#f2ece1', roughness: 0.9 }),
+    white:     new THREE.MeshStandardMaterial({ color: '#f6f4ef', roughness: 0.6 }),
+    screen:    new THREE.MeshStandardMaterial({ color: '#20242a', roughness: 0.3, metalness: 0.3 }),
+    metal:     new THREE.MeshStandardMaterial({ color: '#b9bcc0', roughness: 0.35, metalness: 0.6 }),
+    stone:     new THREE.MeshStandardMaterial({ color: '#d6cfc0', roughness: 0.75 }),
+    rug:       new THREE.MeshStandardMaterial({ color: '#c2a68a', roughness: 1 }),
+    plant:     new THREE.MeshStandardMaterial({ color: '#5f8a52', roughness: 0.9 }),
+    glassSoft: new THREE.MeshStandardMaterial({ color: '#cfe6ee', roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.45 }),
+  };
+
+  function box(w, h, d, mat, x, y, z, ry) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    if (ry) m.rotation.y = ry;
+    m.castShadow = true;
+    return m;
+  }
+  function flat(w, d, mat, x, y, z) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, y, z);
+    return m;
+  }
+  function pottedPlant(x, z, scale) {
+    const g = new THREE.Group();
+    g.add(box(0.3, 0.3, 0.3, MAT.stone, 0, 0.15, 0));
+    const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 0), MAT.plant);
+    leaves.position.y = 0.58; leaves.castShadow = true;
+    g.add(leaves);
+    g.position.set(x, 0, z);
+    if (scale) g.scale.setScalar(scale);
+    return g;
+  }
+
+  // Furniture is laid out against the room's own walls: headboards and wardrobes go to
+  // the back wall, TVs face them from the opposite wall, so nothing floats in the middle.
+  function makeFurniture(kind, w, l) {
+    const g = new THREE.Group();
+    const halfW = w / 2, halfL = l / 2;
+    const clamp = function(v, max){ return Math.max(0.3, Math.min(v, max)); };
+
+    if (kind === 'bedroom') {
+      const bedW = clamp(1.55, w * 0.62), bedL = clamp(2.0, l * 0.62);
+      const bedZ = -halfL + bedL / 2 + 0.35;
+      g.add(flat(clamp(bedW + 1.4, w * 0.9), clamp(bedL + 0.9, l * 0.75), MAT.rug, 0, 0.012, bedZ + 0.25));
+      g.add(box(bedW, 0.32, bedL, MAT.woodDark, 0, 0.16, bedZ));                      // estrado
+      g.add(box(bedW - 0.08, 0.2, bedL - 0.1, MAT.linen, 0, 0.42, bedZ));             // colchão
+      g.add(box(bedW, 0.85, 0.1, MAT.wood, 0, 0.42, bedZ - bedL / 2 - 0.05));         // cabeceira
+      const pw = bedW * 0.42;
+      g.add(box(pw, 0.12, 0.36, MAT.white, -bedW * 0.22, 0.58, bedZ - bedL / 2 + 0.3));
+      g.add(box(pw, 0.12, 0.36, MAT.white,  bedW * 0.22, 0.58, bedZ - bedL / 2 + 0.3));
+      g.add(box(bedW - 0.06, 0.06, bedL * 0.45, MAT.fabricAlt, 0, 0.55, bedZ + bedL * 0.22)); // manta
+      // criado-mudo
+      if (w > bedW + 0.9) {
+        g.add(box(0.42, 0.5, 0.38, MAT.wood, -bedW / 2 - 0.32, 0.25, bedZ - bedL / 2 + 0.25));
+        g.add(box(0.16, 0.24, 0.16, MAT.white, -bedW / 2 - 0.32, 0.62, bedZ - bedL / 2 + 0.25));
+      }
+      // armário encostado na parede lateral
+      const wardW = clamp(1.4, l * 0.45);
+      g.add(box(0.58, 2.05, wardW, MAT.wood, halfW - 0.32, 1.02, halfL - wardW / 2 - 0.3));
+      g.add(box(0.03, 1.7, 0.03, MAT.metal, halfW - 0.62, 1.0, halfL - wardW / 2 - 0.45));
+      // TV na parede da frente, encarando a cama
+      g.add(box(clamp(1.0, w * 0.5), 0.58, 0.05, MAT.screen, 0, 1.25, halfL - 0.1));
+      g.add(box(clamp(1.2, w * 0.55), 0.4, 0.4, MAT.woodDark, 0, 0.2, halfL - 0.28));
+      return g;
+    }
+
+    if (kind === 'living' || kind === 'openconcept' || kind === 'room') {
+      const sofaW = clamp(2.1, w * 0.55);
+      g.add(flat(clamp(sofaW + 1.0, w * 0.8), clamp(2.2, l * 0.55), MAT.rug, 0, 0.012, 0));
+      // sofá (assento + encosto + braços + almofadas)
+      const sz = -halfL + 0.75;
+      g.add(box(sofaW, 0.42, 0.85, MAT.fabric, 0, 0.21, sz));
+      g.add(box(sofaW, 0.55, 0.2, MAT.fabric, 0, 0.62, sz - 0.34));
+      g.add(box(0.18, 0.55, 0.85, MAT.fabric, -sofaW / 2 + 0.09, 0.5, sz));
+      g.add(box(0.18, 0.55, 0.85, MAT.fabric,  sofaW / 2 - 0.09, 0.5, sz));
+      g.add(box(0.36, 0.12, 0.3, MAT.fabricAlt, -sofaW * 0.24, 0.5, sz - 0.16));
+      g.add(box(0.36, 0.12, 0.3, MAT.fabricAlt,  sofaW * 0.24, 0.5, sz - 0.16));
+      // mesa de centro
+      g.add(box(clamp(1.1, w * 0.35), 0.06, 0.6, MAT.wood, 0, 0.4, sz + 0.95));
+      g.add(box(clamp(1.0, w * 0.32), 0.36, 0.5, MAT.woodDark, 0, 0.2, sz + 0.95));
+      // rack + TV na parede oposta
+      g.add(box(clamp(1.7, w * 0.5), 0.42, 0.4, MAT.woodDark, 0, 0.21, halfL - 0.3));
+      g.add(box(clamp(1.5, w * 0.45), 0.85, 0.05, MAT.screen, 0, 1.15, halfL - 0.12));
+      if (w > 3) g.add(pottedPlant(halfW - 0.45, halfL - 0.5, 1));
+      if (kind === 'openconcept') {
+        // ilha/bancada da cozinha integrada
+        g.add(box(clamp(1.9, w * 0.45), 0.9, 0.7, MAT.stone, -halfW + clamp(1.9, w * 0.45) / 2 + 0.3, 0.45, -halfL + 0.6));
+        g.add(box(clamp(2.0, w * 0.46), 0.06, 0.78, MAT.white, -halfW + clamp(1.9, w * 0.45) / 2 + 0.3, 0.93, -halfL + 0.6));
+      }
+      return g;
+    }
+
+    if (kind === 'kitchen') {
+      const runW = clamp(w - 0.6, w * 0.85);
+      g.add(box(runW, 0.86, 0.62, MAT.wood, 0, 0.43, -halfL + 0.4));            // armários baixos
+      g.add(box(runW, 0.06, 0.66, MAT.stone, 0, 0.89, -halfL + 0.4));           // bancada
+      g.add(box(runW * 0.85, 0.6, 0.35, MAT.white, 0, 1.75, -halfL + 0.28));    // armários aéreos
+      g.add(box(0.55, 0.02, 0.4, MAT.metal, -runW * 0.25, 0.92, -halfL + 0.4)); // cuba
+      g.add(box(0.55, 0.02, 0.45, MAT.screen, runW * 0.22, 0.93, -halfL + 0.4));// cooktop
+      g.add(box(0.7, 1.85, 0.68, MAT.white, halfW - 0.45, 0.93, halfL - 0.5));  // geladeira
+      g.add(box(0.03, 1.1, 0.03, MAT.metal, halfW - 0.8, 1.1, halfL - 0.5));
+      if (l > 3) {
+        g.add(box(clamp(1.2, w * 0.4), 0.06, 0.7, MAT.wood, 0, 0.76, halfL - 0.9));
+        g.add(box(0.08, 0.72, 0.08, MAT.woodDark, 0, 0.36, halfL - 0.9));
+      }
+      return g;
+    }
+
+    if (kind === 'wet') {
+      // vaso
+      g.add(box(0.38, 0.42, 0.6, MAT.white, -halfW + 0.35, 0.21, -halfL + 0.45));
+      g.add(box(0.36, 0.5, 0.18, MAT.white, -halfW + 0.35, 0.46, -halfL + 0.2));
+      // pia com bancada
+      g.add(box(0.8, 0.06, 0.5, MAT.stone, halfW - 0.5, 0.85, -halfL + 0.4));
+      g.add(box(0.76, 0.55, 0.46, MAT.wood, halfW - 0.5, 0.56, -halfL + 0.4));
+      g.add(box(0.36, 0.14, 0.28, MAT.white, halfW - 0.5, 0.95, -halfL + 0.4));
+      g.add(box(0.6, 0.7, 0.03, MAT.glassSoft, halfW - 0.5, 1.55, -halfL + 0.14)); // espelho
+      // box do chuveiro
+      const bw = clamp(0.95, w * 0.45), bl = clamp(0.95, l * 0.4);
+      g.add(box(bw, 0.06, bl, MAT.stone, halfW - bw / 2 - 0.1, 0.03, halfL - bl / 2 - 0.1));
+      g.add(box(0.03, 1.9, bl, MAT.glassSoft, halfW - bw - 0.1, 0.95, halfL - bl / 2 - 0.1));
+      g.add(box(0.18, 0.04, 0.18, MAT.metal, halfW - bw / 2 - 0.1, 1.95, halfL - bl / 2 - 0.1));
+      return g;
+    }
+
+    if (kind === 'closet') {
+      g.add(box(0.55, 2.1, clamp(l - 0.5, l * 0.8), MAT.wood, -halfW + 0.3, 1.05, 0));
+      g.add(box(0.55, 2.1, clamp(l - 0.5, l * 0.8), MAT.wood, halfW - 0.3, 1.05, 0));
+      g.add(box(0.8, 0.42, 0.8, MAT.fabric, 0, 0.21, 0));
+      return g;
+    }
+
+    if (kind === 'hall') {
+      g.add(box(clamp(1.0, w * 0.5), 0.06, 0.35, MAT.wood, 0, 0.8, -halfL + 0.25));
+      g.add(pottedPlant(halfW - 0.4, halfL - 0.4, 0.9));
+      return g;
+    }
+
+    if (kind === 'deck' || kind === 'outdoor' || kind === 'grill') {
+      const tw = clamp(1.1, Math.min(w, l) * 0.5);
+      g.add(box(tw, 0.06, tw * 0.7, MAT.wood, 0, 0.74, 0));
+      g.add(box(0.1, 0.72, 0.1, MAT.woodDark, 0, 0.36, 0));
+      g.add(box(0.5, 0.06, 0.45, MAT.wood, 0, 0.44, -tw * 0.65));
+      g.add(box(0.5, 0.06, 0.45, MAT.wood, 0, 0.44, tw * 0.65));
+      g.add(pottedPlant(halfW - 0.45, -halfL + 0.45, 1.05));
+      g.add(pottedPlant(-halfW + 0.45, halfL - 0.45, 0.9));
+      return g;
+    }
+
+    return g;
+  }
+
+  // ---------------- Parapet / railing (sacada & varanda) ----------------
+  // An open deck with nothing around its edge reads as an unfinished slab. A real
+  // balcony has a parapet: a low wall, vertical balusters and a handrail on top —
+  // but ONLY on the edges facing the open air, never on the side that meets the house.
+  const RAIL_H = 1.02;
+  function addRailing(group, rx, baseY, rz, w, l, openEdges) {
+    const wallMat = new THREE.MeshStandardMaterial({ color: '#efe9dd', roughness: 0.85 });
+    const railMat = new THREE.MeshStandardMaterial({ color: '#6f4c33', roughness: 0.7 });
+    const barMat  = new THREE.MeshStandardMaterial({ color: '#8a8f95', roughness: 0.4, metalness: 0.5 });
+    const BASE_H = 0.34, T = 0.1;
+    // edge: [axis, sign] -> 'n' (-z), 's' (+z), 'w' (-x), 'e' (+x)
+    const edges = {
+      n: { x: rx, z: rz - l / 2, len: w, horizontal: true },
+      s: { x: rx, z: rz + l / 2, len: w, horizontal: true },
+      w: { x: rx - w / 2, z: rz, len: l, horizontal: false },
+      e: { x: rx + w / 2, z: rz, len: l, horizontal: false },
+    };
+    Object.keys(edges).forEach(function(k){
+      if (openEdges.indexOf(k) === -1) return;
+      const e = edges[k];
+      const sw = e.horizontal ? e.len : T;
+      const sd = e.horizontal ? T : e.len;
+      // mureta baixa
+      const low = new THREE.Mesh(new THREE.BoxGeometry(sw, BASE_H, sd), wallMat);
+      low.position.set(e.x, baseY + BASE_H / 2, e.z);
+      low.castShadow = true;
+      group.add(low);
+      // balaústres verticais
+      const n = Math.max(2, Math.floor(e.len / 0.28));
+      for (let i = 0; i <= n; i++) {
+        const t = -e.len / 2 + (e.len * i) / n;
+        const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, RAIL_H - BASE_H - 0.06, 6), barMat);
+        bar.position.set(
+          e.horizontal ? e.x + t : e.x,
+          baseY + BASE_H + (RAIL_H - BASE_H - 0.06) / 2,
+          e.horizontal ? e.z : e.z + t
+        );
+        group.add(bar);
+      }
+      // corrimão de madeira
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(e.horizontal ? e.len + T : 0.14, 0.08, e.horizontal ? 0.14 : e.len + T), railMat);
+      rail.position.set(e.x, baseY + RAIL_H, e.z);
+      rail.castShadow = true;
+      group.add(rail);
+    });
+  }
+
   const labelDefs = []; // {el, pos: THREE.Vector3, floor}
+  const roomRefs = []; // {name, kind, w, l, rx, rz, baseY, floor, style}
+  const pickTargets = []; // invisible floor planes used to tap a room in the 3D view
+  const ceilingMeshes = []; // laje de cobertura de cada cômodo fechado
 
   floorKeys.forEach(function(floorNum){
     const baseY = floorNum * FLOOR_H;
@@ -397,7 +625,53 @@ export function build3DHtml(project: Project): string {
         pushSeg(hLines, keyOf(rz + r.l / 2), Object.assign({ x1: rx - r.w / 2, x2: rx + r.w / 2 }, seg));
       }
 
-      if (s.kind === 'grill' || s.kind === 'outdoor') {
+      // ---- Laje de cobertura ----
+      // Every ENCLOSED room gets its own ceiling slab right on top of its walls. Before
+      // this, only the floor above had a slab, so any ground-floor room that stuck out
+      // past the upper floor's footprint (a bedroom, a living room on the side) was left
+      // open to the sky. Sizing the slab per room guarantees no indoor space is uncovered,
+      // whatever shape the floor above happens to have.
+      if (!skipWalls) {
+        const ceil = new THREE.Mesh(
+          new THREE.BoxGeometry(r.w + WALL_T, SLAB_T, r.l + WALL_T),
+          new THREE.MeshStandardMaterial({ color: 0xD9D2C2, roughness: 1 })
+        );
+        ceil.position.set(rx, baseY + WALL_H + SLAB_T / 2, rz);
+        ceil.castShadow = true;
+        ceil.receiveShadow = true;
+        group.add(ceil);
+        ceilingMeshes.push(ceil);
+      }
+
+      // ---- Parapeito de sacada/varanda ----
+      // Only the edges that face open air get a parapet; an edge shared with a
+      // neighbouring room is a doorway/passage, not a place for a railing.
+      if (s.kind === 'deck') {
+        const open = [];
+        function edgeIsFree(axis, coord, spanStart, spanEnd) {
+          return !roomsOnFloor.some(function(o){
+            if (o.id === r.id) return false;
+            if (axis === 'z') {
+              const touches = Math.abs(o.y - coord) < 0.06 || Math.abs(o.y + o.l - coord) < 0.06;
+              return touches && Math.min(o.x + o.w, spanEnd) - Math.max(o.x, spanStart) > 0.3;
+            }
+            const touchesX = Math.abs(o.x - coord) < 0.06 || Math.abs(o.x + o.w - coord) < 0.06;
+            return touchesX && Math.min(o.y + o.l, spanEnd) - Math.max(o.y, spanStart) > 0.3;
+          });
+        }
+        if (edgeIsFree('z', r.y, r.x, r.x + r.w)) open.push('n');
+        if (edgeIsFree('z', r.y + r.l, r.x, r.x + r.w)) open.push('s');
+        if (edgeIsFree('x', r.x, r.y, r.y + r.l)) open.push('w');
+        if (edgeIsFree('x', r.x + r.w, r.y, r.y + r.l)) open.push('e');
+        addRailing(group, rx, baseY, rz, r.w, r.l, open.length ? open : ['n', 's', 'w', 'e']);
+      }
+
+      // ---- Mobília ----
+      const furn = makeFurniture(s.kind, r.w, r.l);
+      furn.position.set(rx, baseY + 0.02, rz);
+      group.add(furn);
+
+      if (s.kind === 'grill') {
         const bench = new THREE.Mesh(new THREE.BoxGeometry(r.w * 0.85, 0.9, 0.4), new THREE.MeshStandardMaterial({ color: '#a94a2a', roughness: 0.9 }));
         bench.position.set(rx, baseY + 0.45, rz - r.l / 2 + 0.3);
         group.add(bench);
@@ -427,30 +701,6 @@ export function build3DHtml(project: Project): string {
         pergolaRoof.castShadow = true;
         group.add(pergolaRoof);
       }
-      if (s.kind === 'kitchen' || s.kind === 'openconcept') {
-        const counter = new THREE.Mesh(
-          new THREE.BoxGeometry(r.w * (s.kind === 'openconcept' ? 0.42 : 0.8), 0.9, 0.55),
-          new THREE.MeshStandardMaterial({ color: '#d8cbb3', roughness: 0.8 })
-        );
-        counter.position.set(rx - (s.kind === 'openconcept' ? r.w * 0.22 : 0), baseY + 0.45, rz - r.l / 2 + 0.4);
-        group.add(counter);
-      }
-      if (s.kind === 'openconcept') {
-        const sofa = new THREE.Mesh(new THREE.BoxGeometry(Math.min(r.w * 0.4, 2.2), 0.5, 0.8), new THREE.MeshStandardMaterial({ color: '#8a6f5a', roughness: 0.85 }));
-        sofa.position.set(rx + r.w * 0.2, baseY + 0.25, rz + r.l / 2 - 0.6);
-        group.add(sofa);
-      }
-      if (s.kind === 'bedroom') {
-        const bed = new THREE.Mesh(new THREE.BoxGeometry(Math.min(r.w * 0.7, 1.8), 0.4, Math.min(r.l * 0.55, 2.0)), new THREE.MeshStandardMaterial({ color: '#c9a986', roughness: 0.8 }));
-        bed.position.set(rx, baseY + 0.22, rz);
-        group.add(bed);
-      }
-      if (s.kind === 'wet') {
-        const toilet = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.45, 12), new THREE.MeshStandardMaterial({ color: '#f4f2ee' }));
-        toilet.position.set(rx - r.w / 2 + 0.35, baseY + 0.22, rz - r.l / 2 + 0.35);
-        group.add(toilet);
-      }
-
       // A window on whichever side of this room is a real EXTERIOR wall (facing the
       // outside of the building, not a shared partition with the room next door).
       const WINDOWED_KINDS = ['bedroom', 'living', 'kitchen', 'openconcept', 'room', 'wet'];
@@ -486,6 +736,19 @@ export function build3DHtml(project: Project): string {
       const floorLabel = floorNum === 0 ? 'térreo' : (floorNum + 'º andar');
       const el = makeLabelEl(s.label, floorKeys.length > 1 ? floorLabel : '');
       labelDefs.push({ el: el, pos: new THREE.Vector3(rx, baseY + WALL_H + 0.5, rz), floor: floorNum });
+
+      const ref = { name: s.label, kind: s.kind, style: s, w: r.w, l: r.l, rx: rx, rz: rz, baseY: baseY, floor: floorNum, floorLabel: floorLabel };
+      roomRefs.push(ref);
+      el.classList.add('tappable');
+      el.addEventListener('click', function(ev){ ev.stopPropagation(); enterRoom(ref); });
+
+      // Invisible pick plane so tapping the room itself (not just its label) opens it.
+      const pick = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.l), new THREE.MeshBasicMaterial({ visible: false }));
+      pick.rotation.x = -Math.PI / 2;
+      pick.position.set(rx, baseY + 0.03, rz);
+      pick.userData.ref = ref;
+      group.add(pick);
+      pickTargets.push(pick);
     });
 
     buildLines(vLines, 'v', baseY, group);
@@ -546,7 +809,12 @@ export function build3DHtml(project: Project): string {
     floorKeys.forEach(function(f){
       floorGroups[f].visible = activeFloor === 'all' || activeFloor === f;
     });
-    roofGroup.visible = (activeFloor === 'all' || activeFloor === topFloor) && document.getElementById('btnRoof').classList.contains('on');
+    const roofOn = document.getElementById('btnRoof').classList.contains('on');
+    roofGroup.visible = (activeFloor === 'all' || activeFloor === topFloor) && roofOn;
+    // The ceiling slabs are what actually cover the rooms below. They stay on for the
+    // whole house, but come off when you isolate a floor or turn the roof off — that is
+    // exactly when someone is trying to look inside.
+    ceilingMeshes.forEach(function(m){ m.visible = activeFloor === 'all' && roofOn; });
     labelDefs.forEach(function(l){
       l.showFloor = activeFloor === 'all' || activeFloor === l.floor;
     });
@@ -572,6 +840,137 @@ export function build3DHtml(project: Project): string {
     });
   }
   applyFloorVisibility();
+
+  // ---------------- Isolated room view ----------------
+  // Tapping a room (or its label) hides the whole house and rebuilds just that room at
+  // the origin: its own floor, three walls (the fourth is left low so you can see in),
+  // a ceiling and its furniture laid out in place. "Voltar" restores the full house.
+  const roomView = new THREE.Group();
+  roomView.visible = false;
+  scene.add(roomView);
+  let currentRoom = null;
+  const savedCam = { pos: new THREE.Vector3(), target: new THREE.Vector3() };
+
+  function clearGroup(g) {
+    while (g.children.length) {
+      const c = g.children.pop();
+      if (c.geometry) c.geometry.dispose();
+    }
+  }
+
+  function enterRoom(ref) {
+    if (currentRoom) return;
+    currentRoom = ref;
+    savedCam.pos.copy(camera.position);
+    savedCam.target.copy(controls.target);
+
+    clearGroup(roomView);
+    const w = ref.w, l = ref.l, halfW = w / 2, halfL = l / 2;
+    const s = ref.style;
+    const isOutdoor = OUTDOOR_KINDS.indexOf(ref.kind) !== -1;
+
+    // Piso
+    const floorMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, l),
+      new THREE.MeshStandardMaterial({ color: s.floor.color, roughness: s.floor.roughness == null ? 0.7 : s.floor.roughness })
+    );
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.receiveShadow = true;
+    roomView.add(floorMesh);
+
+    if (!isOutdoor) {
+      const wallMat = new THREE.MeshStandardMaterial({ color: s.wall.color, roughness: 0.85, side: THREE.DoubleSide });
+      // Três paredes inteiras + a da frente rebaixada, para a câmera enxergar o interior.
+      const back = new THREE.Mesh(new THREE.BoxGeometry(w + WALL_T, WALL_H, WALL_T), wallMat);
+      back.position.set(0, WALL_H / 2, -halfL - WALL_T / 2);
+      const left = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, WALL_H, l), wallMat);
+      left.position.set(-halfW - WALL_T / 2, WALL_H / 2, 0);
+      const right = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, WALL_H, l), wallMat);
+      right.position.set(halfW + WALL_T / 2, WALL_H / 2, 0);
+      const front = new THREE.Mesh(new THREE.BoxGeometry(w + WALL_T, 0.35, WALL_T), wallMat);
+      front.position.set(0, 0.175, halfL + WALL_T / 2);
+      [back, left, right, front].forEach(function(m){ m.castShadow = true; m.receiveShadow = true; roomView.add(m); });
+      // Laje
+      const ceil = new THREE.Mesh(
+        new THREE.BoxGeometry(w + WALL_T * 2, SLAB_T, l + WALL_T * 2),
+        new THREE.MeshStandardMaterial({ color: 0xE4DED0, roughness: 1, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
+      );
+      ceil.position.y = WALL_H + SLAB_T / 2;
+      roomView.add(ceil);
+      // Rodapé
+      const skirt = new THREE.Mesh(
+        new THREE.BoxGeometry(w, 0.1, l),
+        new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.6 })
+      );
+      skirt.position.y = 0.05;
+      skirt.scale.set(1.008, 1, 1.008);
+      roomView.add(skirt);
+    } else if (ref.kind === 'deck') {
+      addRailing(roomView, 0, 0, 0, w, l, ['n', 's', 'w', 'e']);
+    }
+
+    roomView.add(makeFurniture(ref.kind, w, l));
+    roomView.visible = true;
+
+    // Esconde a casa inteira e o exterior
+    floorKeys.forEach(function(f){ floorGroups[f].visible = false; });
+    roofGroup.visible = false;
+    worldDecor.visible = false;
+    document.getElementById('labels').style.display = 'none';
+    document.getElementById('floorSwitch').style.display = 'none';
+    document.getElementById('hud').style.display = 'none';
+    const bar = document.getElementById('roomBar');
+    bar.style.display = 'flex';
+    document.getElementById('roomName').textContent = ref.name;
+    document.getElementById('roomMeta').textContent =
+      ref.floorLabel + ' · ' + w.toFixed(1).replace('.', ',') + ' × ' + l.toFixed(1).replace('.', ',') + ' m · ' +
+      (w * l).toFixed(1).replace('.', ',') + ' m²';
+
+    const d = Math.hypot(w, l) + 2.2;
+    camera.position.set(0, d * 0.62, d * 0.95);
+    controls.target.set(0, 0.9, 0);
+    controls.minDistance = 1.2;
+    controls.maxDistance = d * 2.2;
+    controls.update();
+  }
+
+  function exitRoom() {
+    if (!currentRoom) return;
+    currentRoom = null;
+    roomView.visible = false;
+    clearGroup(roomView);
+    worldDecor.visible = true;
+    document.getElementById('labels').style.display =
+      document.getElementById('btnLabels').classList.contains('on') ? 'block' : 'none';
+    document.getElementById('floorSwitch').style.display = floorKeys.length > 1 ? 'flex' : 'none';
+    document.getElementById('hud').style.display = 'flex';
+    document.getElementById('roomBar').style.display = 'none';
+    applyFloorVisibility();
+    controls.minDistance = diag * 0.3;
+    controls.maxDistance = diag * 2.5;
+    camera.position.copy(savedCam.pos);
+    controls.target.copy(savedCam.target);
+    controls.update();
+  }
+
+  document.getElementById('btnBackRoom').addEventListener('click', exitRoom);
+
+  // Tap (not drag) on a room opens it. A small movement threshold keeps orbiting
+  // the camera from being read as a tap.
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  let downX = 0, downY = 0, downT = 0;
+  canvas.addEventListener('pointerdown', function(e){ downX = e.clientX; downY = e.clientY; downT = Date.now(); });
+  canvas.addEventListener('pointerup', function(e){
+    if (currentRoom) return;
+    if (Math.hypot(e.clientX - downX, e.clientY - downY) > 8 || Date.now() - downT > 500) return;
+    ndc.x = (e.clientX / window.innerWidth) * 2 - 1;
+    ndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    ray.setFromCamera(ndc, camera);
+    const visibleTargets = pickTargets.filter(function(p){ return p.parent && p.parent.visible; });
+    const hits = ray.intersectObjects(visibleTargets, false);
+    if (hits.length && hits[0].object.userData.ref) enterRoom(hits[0].object.userData.ref);
+  });
 
   // Controls
   let autoRotate = false;
