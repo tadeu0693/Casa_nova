@@ -41,6 +41,8 @@ function serializeRooms(rooms: Room[]) {
     w: r.width,
     l: r.length,
     floor: r.floor || 0,
+    walls: r.walls && r.walls.length ? r.walls : ["n", "s", "w", "e"],
+    openings: r.openings || [],
     style: styleFor(r.name),
   }));
 }
@@ -235,52 +237,92 @@ export function build3DHtml(project: Project): string {
   }
 
   function keyOf(v) { return Math.round(v * 100); }
-  function pushSeg(map, key, seg) {
-    const k = String(key);
-    if (!map[k]) map[k] = [];
-    map[k].push(seg);
+
+  const DOOR_H = 2.10, SILL_H = 0.95, WIN_H = 1.15;
+
+  // Subtract a list of cuts from a span, returning whatever is left of it.
+  function subtractSpans(pieces, cuts) {
+    let out = pieces;
+    cuts.forEach(function(c){
+      const next = [];
+      out.forEach(function(p){
+        if (c.end <= p.start + 0.001 || c.start >= p.end - 0.001) { next.push(p); return; }
+        if (c.start > p.start + 0.001) next.push({ start: p.start, end: c.start });
+        if (c.end < p.end - 0.001) next.push({ start: c.end, end: p.end });
+      });
+      out = next;
+    });
+    return out.filter(function(p){ return p.end - p.start > 0.02; });
   }
 
-  // Build every physical wall exactly once per floor: merge touching/overlapping
-  // segments along each vertical (constant X) / horizontal (constant Z) line so
-  // two adjacent rooms share a single wall instead of two stacked, flickering ones.
-  function buildLines(map, orientation, baseY, group) {
-    Object.keys(map).forEach(function (k) {
-      const segs = map[k].slice().sort(function (a, b) {
-        const aStart = orientation === 'v' ? a.z1 : a.x1;
-        const bStart = orientation === 'v' ? b.z1 : b.x1;
-        return aStart - bStart;
-      });
-      const merged = [];
-      segs.forEach(function (seg) {
-        const start = orientation === 'v' ? seg.z1 : seg.x1;
-        const end = orientation === 'v' ? seg.z2 : seg.x2;
-        const last = merged[merged.length - 1];
-        if (last && start <= last.end + 0.03) {
-          last.end = Math.max(last.end, end);
-          if (seg.opacity > last.opacity) { last.color = seg.color; last.opacity = seg.opacity; }
-        } else {
-          merged.push({ start: start, end: end, color: seg.color, opacity: seg.opacity });
-        }
-      });
-      const coord = parseInt(k, 10) / 100;
-      merged.forEach(function (m) {
-        const length = orientation === 'v' ? (m.end - m.start) : (m.end - m.start) + WALL_T;
-        if (length <= 0.02) return;
-        const mid = (m.start + m.end) / 2;
-        const mat = new THREE.MeshStandardMaterial({
-          color: m.color,
-          transparent: m.opacity < 1,
-          opacity: m.opacity,
-          roughness: 0.8,
-        });
-        if (orientation === 'v') {
-          group.add(addWall(coord, baseY, mid, WALL_T, WALL_H, length, mat));
-        } else {
-          group.add(addWall(mid, baseY, coord, length, WALL_H, WALL_T, mat));
-        }
-      });
+  // One wall run, built as boxes. A door leaves a gap from the floor up to the lintel;
+  // a window leaves a gap between the sill and the header. The pieces of wall above and
+  // below an opening are still built, which is what makes it read as a real opening cut
+  // into the wall rather than a wall that simply stops.
+  function addWallRun(group, orientation, coord, start, end, baseY, mat, voidsHere) {
+    function slab(a, b, y0, h) {
+      if (b - a < 0.02 || h < 0.02) return;
+      const mid = (a + b) / 2;
+      const len = b - a;
+      const m = new THREE.Mesh(
+        orientation === 'v' ? new THREE.BoxGeometry(WALL_T, h, len) : new THREE.BoxGeometry(len, h, WALL_T),
+        mat
+      );
+      m.position.set(orientation === 'v' ? coord : mid, baseY + y0 + h / 2, orientation === 'v' ? mid : coord);
+      m.castShadow = true;
+      m.material.polygonOffset = true;
+      m.material.polygonOffsetFactor = 1;
+      m.material.polygonOffsetUnits = 1;
+      group.add(m);
+    }
+    const cuts = voidsHere.filter(function(v){ return v.end > start + 0.001 && v.start < end - 0.001; });
+    // Solid stretches between the openings run the full height.
+    subtractSpans([{ start: start, end: end }], cuts).forEach(function(p){ slab(p.start, p.end, 0, WALL_H); });
+    // And each opening keeps its lintel (and sill, for a window).
+    cuts.forEach(function(v){
+      const a = Math.max(v.start, start), b = Math.min(v.end, end);
+      if (v.kind === 'porta') {
+        slab(a, b, DOOR_H, Math.max(0, WALL_H - DOOR_H));
+      } else {
+        slab(a, b, 0, SILL_H);
+        slab(a, b, SILL_H + WIN_H, Math.max(0, WALL_H - SILL_H - WIN_H));
+      }
     });
+  }
+
+  // The door leaf / window glass that sits inside the opening.
+  function addOpeningPanel(group, orientation, coord, v, baseY) {
+    const len = v.end - v.start;
+    const mid = (v.start + v.end) / 2;
+    if (v.kind === 'porta') {
+      const leaf = new THREE.Mesh(
+        orientation === 'v' ? new THREE.BoxGeometry(0.05, DOOR_H, len * 0.94) : new THREE.BoxGeometry(len * 0.94, DOOR_H, 0.05),
+        new THREE.MeshStandardMaterial({ color: '#8a5a3a', roughness: 0.65 })
+      );
+      leaf.position.set(orientation === 'v' ? coord : mid, baseY + DOOR_H / 2, orientation === 'v' ? mid : coord);
+      group.add(leaf);
+      const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.1, 8), new THREE.MeshStandardMaterial({ color: '#c9b06a', metalness: 0.7, roughness: 0.3 }));
+      knob.rotation.z = Math.PI / 2;
+      knob.position.set(
+        orientation === 'v' ? coord + 0.06 : mid + len * 0.34,
+        baseY + 1.02,
+        orientation === 'v' ? mid + len * 0.34 : coord + 0.06
+      );
+      group.add(knob);
+    } else {
+      const glass = new THREE.Mesh(
+        orientation === 'v' ? new THREE.BoxGeometry(0.04, WIN_H, len * 0.95) : new THREE.BoxGeometry(len * 0.95, WIN_H, 0.04),
+        new THREE.MeshStandardMaterial({ color: '#bfe0ea', roughness: 0.12, metalness: 0.25, transparent: true, opacity: 0.55 })
+      );
+      glass.position.set(orientation === 'v' ? coord : mid, baseY + SILL_H + WIN_H / 2, orientation === 'v' ? mid : coord);
+      group.add(glass);
+      const frame = new THREE.Mesh(
+        orientation === 'v' ? new THREE.BoxGeometry(0.06, 0.07, len) : new THREE.BoxGeometry(len, 0.07, 0.06),
+        new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.6 })
+      );
+      frame.position.set(orientation === 'v' ? coord : mid, baseY + SILL_H, orientation === 'v' ? mid : coord);
+      group.add(frame);
+    }
   }
 
   // Soft contact shadow under the BUILT footprint (not the lot) — a simple
@@ -576,7 +618,13 @@ export function build3DHtml(project: Project): string {
     slab.receiveShadow = true;
     group.add(slab);
 
-    const vLines = {}, hLines = {};
+    // Every wall of every room on this floor, as an addressable spec. Openings are
+    // shared voids on the line, and a wall the person deleted removes the wall on that
+    // line entirely — that is what "integrar os ambientes" means: the partition is gone
+    // for both rooms, not just for the one that was selected.
+    const wallSpecs = [];   // {orientation, coord, start, end, color, opacity}
+    const wallVoids = [];   // {orientation, coord, start, end, kind}
+    const wallRemoved = []; // {orientation, coord, start, end}
 
     // Which walls are truly EXTERIOR (facing outside, not a shared partition with the
     // room next door) — needed so windows only appear on the building's actual facade.
@@ -616,14 +664,33 @@ export function build3DHtml(project: Project): string {
       }
 
       const skipWalls = ['grass', 'asphalt', 'pool', 'deck', 'outdoor'].indexOf(s.kind) !== -1;
+      const roomWalls = (r.walls && r.walls.length) ? r.walls : ['n', 's', 'w', 'e'];
+      // Geometry of each side, in world coords, keyed the way the 2D editor names them.
+      const sideGeom = {
+        n: { orientation: 'h', coord: rz - r.l / 2, start: rx - r.w / 2, end: rx + r.w / 2 },
+        s: { orientation: 'h', coord: rz + r.l / 2, start: rx - r.w / 2, end: rx + r.w / 2 },
+        w: { orientation: 'v', coord: rx - r.w / 2, start: rz - r.l / 2, end: rz + r.l / 2 },
+        e: { orientation: 'v', coord: rx + r.w / 2, start: rz - r.l / 2, end: rz + r.l / 2 },
+      };
       if (!skipWalls) {
         const opacity = s.wall.opacity == null ? 1 : s.wall.opacity;
-        const seg = { color: s.wall.color, opacity: opacity };
-        pushSeg(vLines, keyOf(rx - r.w / 2), Object.assign({ z1: rz - r.l / 2, z2: rz + r.l / 2 }, seg));
-        pushSeg(vLines, keyOf(rx + r.w / 2), Object.assign({ z1: rz - r.l / 2, z2: rz + r.l / 2 }, seg));
-        pushSeg(hLines, keyOf(rz - r.l / 2), Object.assign({ x1: rx - r.w / 2, x2: rx + r.w / 2 }, seg));
-        pushSeg(hLines, keyOf(rz + r.l / 2), Object.assign({ x1: rx - r.w / 2, x2: rx + r.w / 2 }, seg));
+        ['n', 's', 'w', 'e'].forEach(function(side){
+          const g = sideGeom[side];
+          if (roomWalls.indexOf(side) === -1) {
+            wallRemoved.push({ orientation: g.orientation, coord: g.coord, start: g.start, end: g.end });
+            return;
+          }
+          wallSpecs.push({ orientation: g.orientation, coord: g.coord, start: g.start, end: g.end, color: s.wall.color, opacity: opacity });
+        });
       }
+      (r.openings || []).forEach(function(o){
+        const g = sideGeom[o.side];
+        if (!g) return;
+        const len = g.end - g.start;
+        const center = g.start + Math.max(0, Math.min(1, o.pos)) * len;
+        const half = Math.min(o.width, len) / 2;
+        wallVoids.push({ orientation: g.orientation, coord: g.coord, start: center - half, end: center + half, kind: o.kind === 'porta' ? 'porta' : 'janela' });
+      });
 
       // ---- Laje de cobertura ----
       // Every ENCLOSED room gets its own ceiling slab right on top of its walls. Before
@@ -737,7 +804,7 @@ export function build3DHtml(project: Project): string {
       const el = makeLabelEl(s.label, floorKeys.length > 1 ? floorLabel : '');
       labelDefs.push({ el: el, pos: new THREE.Vector3(rx, baseY + WALL_H + 0.5, rz), floor: floorNum });
 
-      const ref = { name: s.label, kind: s.kind, style: s, w: r.w, l: r.l, rx: rx, rz: rz, baseY: baseY, floor: floorNum, floorLabel: floorLabel };
+      const ref = { name: s.label, kind: s.kind, style: s, w: r.w, l: r.l, rx: rx, rz: rz, baseY: baseY, floor: floorNum, floorLabel: floorLabel, walls: roomWalls, openings: r.openings || [] };
       roomRefs.push(ref);
       el.classList.add('tappable');
       el.addEventListener('click', function(ev){ ev.stopPropagation(); enterRoom(ref); });
@@ -751,8 +818,38 @@ export function build3DHtml(project: Project): string {
       pickTargets.push(pick);
     });
 
-    buildLines(vLines, 'v', baseY, group);
-    buildLines(hLines, 'h', baseY, group);
+    // Emit the walls. Two rooms sharing a partition produce two identical specs, so we
+    // track what has already been built per line and skip the duplicate — one physical
+    // wall, not two flickering ones stacked on top of each other.
+    const emitted = {};   // lineKey -> [{start,end}] already built
+    const panelDone = {}; // so a shared opening only gets one door leaf / one pane
+    function sameLine(a, b) { return a.orientation === b.orientation && Math.abs(a.coord - b.coord) < 0.06; }
+
+    wallSpecs.forEach(function(spec){
+      const key = spec.orientation + ':' + keyOf(spec.coord);
+      const cuts = (emitted[key] || [])
+        .concat(wallRemoved.filter(function(rm){ return sameLine(rm, spec); }));
+      const pieces = subtractSpans([{ start: spec.start, end: spec.end }], cuts);
+      if (!pieces.length) return;
+      const voidsHere = wallVoids.filter(function(v){ return sameLine(v, spec); });
+      const mat = new THREE.MeshStandardMaterial({
+        color: spec.color,
+        transparent: spec.opacity < 1,
+        opacity: spec.opacity,
+        roughness: 0.8,
+      });
+      pieces.forEach(function(p){
+        addWallRun(group, spec.orientation, spec.coord, p.start, p.end, baseY, mat, voidsHere);
+        (emitted[key] = emitted[key] || []).push(p);
+        voidsHere.forEach(function(v, vi){
+          if (v.end <= p.start + 0.001 || v.start >= p.end - 0.001) return;
+          const pk = key + ':' + vi;
+          if (panelDone[pk]) return;
+          panelDone[pk] = true;
+          addOpeningPanel(group, spec.orientation, spec.coord, v, baseY);
+        });
+      });
+    });
   });
 
   // Roof: a real hip roof (four sloped faces meeting at a ridge line), sized tightly
@@ -880,16 +977,35 @@ export function build3DHtml(project: Project): string {
 
     if (!isOutdoor) {
       const wallMat = new THREE.MeshStandardMaterial({ color: s.wall.color, roughness: 0.85, side: THREE.DoubleSide });
-      // Três paredes inteiras + a da frente rebaixada, para a câmera enxergar o interior.
-      const back = new THREE.Mesh(new THREE.BoxGeometry(w + WALL_T, WALL_H, WALL_T), wallMat);
-      back.position.set(0, WALL_H / 2, -halfL - WALL_T / 2);
-      const left = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, WALL_H, l), wallMat);
-      left.position.set(-halfW - WALL_T / 2, WALL_H / 2, 0);
-      const right = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, WALL_H, l), wallMat);
-      right.position.set(halfW + WALL_T / 2, WALL_H / 2, 0);
-      const front = new THREE.Mesh(new THREE.BoxGeometry(w + WALL_T, 0.35, WALL_T), wallMat);
-      front.position.set(0, 0.175, halfL + WALL_T / 2);
-      [back, left, right, front].forEach(function(m){ m.castShadow = true; m.receiveShadow = true; roomView.add(m); });
+      const keptWalls = (ref.walls && ref.walls.length) ? ref.walls : ['n', 's', 'w', 'e'];
+      // The isolated view is the same room, so it shows the same walls: a wall deleted in
+      // the 2D editor is missing here too, and its doors and windows are cut in the same
+      // places. Only the south wall is treated specially — it is dropped to a low kerb so
+      // the camera can see inside, which is a viewing aid, not an edit.
+      const geom = {
+        n: { orientation: 'h', coord: -halfL, start: -halfW, end: halfW },
+        s: { orientation: 'h', coord: halfL, start: -halfW, end: halfW },
+        w: { orientation: 'v', coord: -halfW, start: -halfL, end: halfL },
+        e: { orientation: 'v', coord: halfW, start: -halfL, end: halfL },
+      };
+      ['n', 'w', 'e'].forEach(function(side){
+        if (keptWalls.indexOf(side) === -1) return;
+        const g = geom[side];
+        const voids = (ref.openings || []).filter(function(o){ return o.side === side; }).map(function(o){
+          const len = g.end - g.start;
+          const center = g.start + Math.max(0, Math.min(1, o.pos)) * len;
+          const half = Math.min(o.width, len) / 2;
+          return { start: center - half, end: center + half, kind: o.kind === 'porta' ? 'porta' : 'janela' };
+        });
+        addWallRun(roomView, g.orientation, g.coord, g.start, g.end, 0, wallMat, voids);
+        voids.forEach(function(v){ addOpeningPanel(roomView, g.orientation, g.coord, v, 0); });
+      });
+      if (keptWalls.indexOf('s') !== -1) {
+        const front = new THREE.Mesh(new THREE.BoxGeometry(w + WALL_T, 0.35, WALL_T), wallMat);
+        front.position.set(0, 0.175, halfL + WALL_T / 2);
+        front.castShadow = true;
+        roomView.add(front);
+      }
       // Laje
       const ceil = new THREE.Mesh(
         new THREE.BoxGeometry(w + WALL_T * 2, SLAB_T, l + WALL_T * 2),
