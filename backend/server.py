@@ -90,6 +90,13 @@ class Opening(BaseModel):
     width: float = Field(default=0.9, gt=0)
 
 
+class PlacedItem(BaseModel):
+    kind: str
+    x: float = 0
+    z: float = 0
+    ry: float = 0
+
+
 class Room(BaseModel):
     name: str
     width: float = Field(gt=0)
@@ -101,6 +108,9 @@ class Room(BaseModel):
     # purpose, to merge this room with the neighbouring one (open concept).
     walls: List[str] = ["n", "s", "w", "e"]
     openings: List[Opening] = []
+    # Furniture the person positioned by hand in the 3D view. x/z are metres relative to
+    # the centre of the room, ry is the rotation in radians.
+    items: List[PlacedItem] = []
 
 
 class ProjectInput(BaseModel):

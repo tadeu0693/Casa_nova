@@ -196,7 +196,7 @@ export default function Index() {
       />
     );
   } else if (tab === "3d" && project) {
-    content = <View3D project={project} onBack={() => setTab("plan")} />;
+    content = <View3D project={project} onBack={() => setTab("plan")} onSaveRooms={savePlanLayout} />;
   } else if (tab === "estimate" && project) {
     content = (
       <Estimator

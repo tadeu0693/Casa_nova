@@ -6,6 +6,9 @@ export type WallSide = "n" | "s" | "w" | "e";
 export type OpeningKind = "porta" | "janela";
 // `pos` is 0..1 along the wall (0.5 = centered); `width` is in metres.
 export type Opening = { id: string; side: WallSide; kind: OpeningKind; pos: number; width: number };
+// A furniture piece the person positioned by hand. x/z are metres RELATIVE to the
+// centre of the room; ry is the rotation in radians.
+export type PlacedItem = { kind: string; x: number; z: number; ry: number };
 export type Room = {
   name: string;
   width: number;
@@ -15,6 +18,7 @@ export type Room = {
   floor?: number;
   walls?: WallSide[];
   openings?: Opening[];
+  items?: PlacedItem[];
 };
 export type Project = {
   project_id?: string;

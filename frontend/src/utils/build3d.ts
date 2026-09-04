@@ -9,6 +9,7 @@
 // at a time with the floor switcher in the HUD.
 
 import type { Project, Room } from "@/src/types";
+import { FURNITURE_LIB_JS, PLACEMENT_UI_JS } from "@/src/utils/furniture3d";
 
 type Material = { color: string; roughness?: number; metalness?: number; opacity?: number };
 
@@ -43,6 +44,7 @@ function serializeRooms(rooms: Room[]) {
     floor: r.floor || 0,
     walls: r.walls && r.walls.length ? r.walls : ["n", "s", "w", "e"],
     openings: r.openings || [],
+    items: r.items || [],
     style: styleFor(r.name),
   }));
 }
@@ -427,6 +429,9 @@ export function build3DHtml(project: Project): string {
     return g;
   }
 
+  ${FURNITURE_LIB_JS}
+  const placedItems = [];
+
   // Furniture is laid out against the room's own walls: headboards and wardrobes go to
   // the back wall, TVs face them from the opposite wall, so nothing floats in the middle.
   function makeFurniture(kind, w, l) {
@@ -734,9 +739,23 @@ export function build3DHtml(project: Project): string {
       }
 
       // ---- Mobília ----
-      const furn = makeFurniture(s.kind, r.w, r.l);
-      furn.position.set(rx, baseY + 0.02, rz);
-      group.add(furn);
+      // Pieces the person placed by hand win. With no items, it falls back to the
+      // automatic per-room-type arrangement (the previous behaviour).
+      if (r.items && r.items.length) {
+        r.items.forEach(function (it) {
+          const built = buildPiece(it.kind);
+          if (!built) return;
+          built.g.position.set(rx + (it.x || 0), baseY + 0.02, rz + (it.z || 0));
+          built.g.rotation.y = it.ry || 0;
+          built.g.userData = { roomId: r.id, kind: it.kind, w: built.w, d: built.d, baseY: baseY + 0.02 };
+          group.add(built.g);
+          placedItems.push(built.g);
+        });
+      } else {
+        const furn = makeFurniture(s.kind, r.w, r.l);
+        furn.position.set(rx, baseY + 0.02, rz);
+        group.add(furn);
+      }
 
       if (s.kind === 'grill') {
         const bench = new THREE.Mesh(new THREE.BoxGeometry(r.w * 0.85, 0.9, 0.4), new THREE.MeshStandardMaterial({ color: '#a94a2a', roughness: 0.9 }));
@@ -804,7 +823,7 @@ export function build3DHtml(project: Project): string {
       const el = makeLabelEl(s.label, floorKeys.length > 1 ? floorLabel : '');
       labelDefs.push({ el: el, pos: new THREE.Vector3(rx, baseY + WALL_H + 0.5, rz), floor: floorNum });
 
-      const ref = { name: s.label, kind: s.kind, style: s, w: r.w, l: r.l, rx: rx, rz: rz, baseY: baseY, floor: floorNum, floorLabel: floorLabel, walls: roomWalls, openings: r.openings || [] };
+      const ref = { id: r.id, name: s.label, kind: s.kind, style: s, w: r.w, l: r.l, rx: rx, rz: rz, baseY: baseY, floor: floorNum, floorLabel: floorLabel, walls: roomWalls, openings: r.openings || [] };
       roomRefs.push(ref);
       el.classList.add('tappable');
       el.addEventListener('click', function(ev){ ev.stopPropagation(); enterRoom(ref); });
@@ -1079,6 +1098,7 @@ export function build3DHtml(project: Project): string {
   canvas.addEventListener('pointerdown', function(e){ downX = e.clientX; downY = e.clientY; downT = Date.now(); });
   canvas.addEventListener('pointerup', function(e){
     if (currentRoom) return;
+    if (document.body.classList.contains('furnish')) return;
     if (Math.hypot(e.clientX - downX, e.clientY - downY) > 8 || Date.now() - downT > 500) return;
     ndc.x = (e.clientX / window.innerWidth) * 2 - 1;
     ndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -1157,6 +1177,8 @@ export function build3DHtml(project: Project): string {
     renderer.render(scene, camera);
   }
   animate();
+
+  ${PLACEMENT_UI_JS}
 })();
 </script>
 </body></html>`;
