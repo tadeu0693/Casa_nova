@@ -120,6 +120,10 @@ class ProjectInput(BaseModel):
     length: float = Field(gt=0)
     rooms: List[Room] = []
     cep: str = ""
+    # The 3D editor's model: how many storeys, and the rooms as placed rectangles with
+    # their furniture. Stored as-is; the PUT writes the whole document.
+    floors: int = 2
+    plan: list = []
 
 
 class CartItem(BaseModel):

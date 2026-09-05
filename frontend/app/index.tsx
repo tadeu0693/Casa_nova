@@ -83,6 +83,27 @@ export default function Index() {
     await storage.setItem(CEP_KEY, JSON.stringify(data));
   };
 
+  // The 3D editor owns the `plan` model. It saves on every change (debounced by the
+  // scene), so this stays quiet — no toast, no spinner — unlike the explicit "save
+  // layout" button in the 2D screen.
+  const savePlan3D = async (plan: NonNullable<Project["plan"]>, floors: number) => {
+    if (!project) return;
+    const updated = { ...project, plan, floors };
+    if (project.project_id) {
+      try {
+        const saved = await request(`/projects/${project.project_id}`, {
+          method: "PUT",
+          body: JSON.stringify(updated),
+        });
+        setProject(saved);
+      } catch {
+        setProject(updated);
+      }
+    } else {
+      setProject(updated);
+    }
+  };
+
   const savePlanLayout = async (rooms: Project["rooms"]) => {
     if (!project) return;
     setSavingLayout(true);
@@ -196,7 +217,7 @@ export default function Index() {
       />
     );
   } else if (tab === "3d" && project) {
-    content = <View3D project={project} onBack={() => setTab("plan")} onSaveRooms={savePlanLayout} />;
+    content = <View3D project={project} onBack={() => setTab("plan")} onSavePlan={savePlan3D} />;
   } else if (tab === "estimate" && project) {
     content = (
       <Estimator

@@ -8,9 +8,9 @@ import { useTheme } from "@/src/utils/ThemeContext";
 import type { lightColors } from "@/src/theme";
 import { Icon } from "@/src/components/UI";
 import { build3DHtml } from "@/src/utils/build3d";
-import type { Project } from "@/src/types";
+import type { PlanRoom, Project } from "@/src/types";
 
-export function View3D({ project, onBack, onSaveRooms }: { project: Project; onBack: () => void; onSaveRooms?: (rooms: Project["rooms"]) => void | Promise<void> }) {
+export function View3D({ project, onBack, onSavePlan }: { project: Project; onBack: () => void; onSavePlan?: (plan: PlanRoom[], floors: number) => void | Promise<void> }) {
   const { colors } = useTheme();
   const styles = useMemo(() => buildStyles(colors), [colors]);
   // The HTML is built ONCE per mount. Saving furniture updates the project, and if the
@@ -34,11 +34,8 @@ export function View3D({ project, onBack, onSaveRooms }: { project: Project; onB
           await Sharing.shareAsync(fileUri, { mimeType: "image/png", dialogTitle: "Compartilhar maquete 3D" });
         }
       }
-      if (data.type === "save_items" && data.rooms && onSaveRooms) {
-        // `data.rooms` is keyed by the room's index in the project, which is exactly the
-        // id build3d hands to the scene.
-        const rooms = project.rooms.map((r, i) => ({ ...r, items: data.rooms[i] || [] }));
-        await onSaveRooms(rooms);
+      if (data.type === "save_plan" && onSavePlan) {
+        await onSavePlan(data.plan || [], data.floors);
       }
     } catch (e) {
       // Sharing is a nice-to-have — a failure here shouldn't disrupt viewing the 3D model.

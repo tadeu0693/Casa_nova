@@ -6,9 +6,6 @@ export type WallSide = "n" | "s" | "w" | "e";
 export type OpeningKind = "porta" | "janela";
 // `pos` is 0..1 along the wall (0.5 = centered); `width` is in metres.
 export type Opening = { id: string; side: WallSide; kind: OpeningKind; pos: number; width: number };
-// A furniture piece the person positioned by hand. x/z are metres RELATIVE to the
-// centre of the room; ry is the rotation in radians.
-export type PlacedItem = { kind: string; x: number; z: number; ry: number };
 export type Room = {
   name: string;
   width: number;
@@ -18,8 +15,27 @@ export type Room = {
   floor?: number;
   walls?: WallSide[];
   openings?: Opening[];
+};
+// A furniture piece inside a room: [kind, x, z, rotation]. x/z are metres relative to
+// the centre of the room, so moving the room carries its furniture along.
+export type PlacedItem = [string, number, number, number];
+
+// The 3D editor's model of a room: a rectangle placed in the world, with its furniture.
+export type PlanRoom = {
+  id: string;
+  nome: string;
+  f: number;
+  w: number;
+  d: number;
+  cx: number;
+  cz: number;
+  rot?: number;
+  piso: "madeira" | "frio" | "deck" | "pedra" | "grama";
+  tipo?: "circ" | "sacada" | null;
+  ext?: 0 | 1;
   items?: PlacedItem[];
 };
+
 export type Project = {
   project_id?: string;
   name: string;
@@ -28,6 +44,8 @@ export type Project = {
   length: number;
   rooms: Room[];
   cep?: string;
+  floors?: number;
+  plan?: PlanRoom[];
 };
 export type Offer = {
   id: string;

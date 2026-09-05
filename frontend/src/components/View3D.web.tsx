@@ -1,18 +1,40 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/src/utils/ThemeContext";
 import type { lightColors } from "@/src/theme";
 import { Icon } from "@/src/components/UI";
 import { build3DHtml } from "@/src/utils/build3d";
-import type { Project } from "@/src/types";
+import type { PlanRoom, Project } from "@/src/types";
 
 // Web build uses a native <iframe> since react-native-webview doesn't render on web.
 // Metro auto-picks this file when bundling for web.
-export function View3D({ project, onBack }: { project: Project; onBack: () => void }) {
+export function View3D({ project, onBack, onSavePlan }: { project: Project; onBack: () => void; onSavePlan?: (plan: PlanRoom[], floors: number) => void | Promise<void> }) {
   const { colors } = useTheme();
   const styles = useMemo(() => buildStyles(colors), [colors]);
-  const html = useMemo(() => build3DHtml(project), [project]);
+  // Built once per mount: saving updates the project, and rebuilding the markup on every
+  // change would reload the iframe and throw away the editing session mid-drag.
+  const initialProject = useRef(project);
+  const html = useMemo(() => build3DHtml(initialProject.current), []);
+
+  // The iframe has no ReactNativeWebView, so the scene falls back to window.parent.
+  const saveRef = useRef(onSavePlan);
+  saveRef.current = onSavePlan;
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      try {
+        const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+        if (data && data.type === "save_plan" && saveRef.current) {
+          saveRef.current(data.plan || [], data.floors);
+        }
+      } catch {
+        // Messages from other sources aren't ours to handle.
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.topBar}>
