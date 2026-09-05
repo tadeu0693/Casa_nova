@@ -10,7 +10,7 @@ import { Icon } from "@/src/components/UI";
 import { build3DHtml } from "@/src/utils/build3d";
 import type { PlanRoom, Project } from "@/src/types";
 
-export function View3D({ project, onBack, onSavePlan }: { project: Project; onBack: () => void; onSavePlan?: (plan: PlanRoom[], floors: number) => void | Promise<void> }) {
+export function View3D({ project, onBack, onSavePlan, onNext }: { project: Project; onBack: () => void; onSavePlan?: (plan: PlanRoom[], floors: number) => void | Promise<void>; onNext?: () => void }) {
   const { colors } = useTheme();
   const styles = useMemo(() => buildStyles(colors), [colors]);
   // The HTML is built ONCE per mount. Saving furniture updates the project, and if the
@@ -54,6 +54,12 @@ export function View3D({ project, onBack, onSavePlan }: { project: Project; onBa
           <Text style={styles.title} numberOfLines={1}>{project.name}</Text>
           <Text style={styles.subtitle}>Maquete 3D · {project.width}×{project.length} m</Text>
         </View>
+        {onNext ? (
+          <Pressable testID="view3d-next" onPress={onNext} style={styles.nextBtn}>
+            <Text style={styles.nextText}>Materiais</Text>
+            <Icon name="chevron-forward" size={16} color={colors.white} />
+          </Pressable>
+        ) : null}
       </View>
       <WebView
         testID="view3d-webview"
@@ -97,6 +103,8 @@ function buildStyles(colors: typeof lightColors) {
   back: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -8 },
   title: { color: colors.ink, fontSize: 17, fontWeight: "700" },
   subtitle: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  nextBtn: { flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: colors.brand, borderRadius: 999, paddingLeft: 14, paddingRight: 10, paddingVertical: 9 },
+  nextText: { color: colors.white, fontWeight: "700", fontSize: 13 },
   web: { flex: 1, backgroundColor: colors.bg },
   loading: { position: "absolute", inset: 0 as any, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
   loadingText: { color: colors.muted, fontSize: 13, fontWeight: "600" },

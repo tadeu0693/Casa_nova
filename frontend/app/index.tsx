@@ -9,7 +9,6 @@ import { Auth } from "@/src/components/Auth";
 import { Home } from "@/src/components/Home";
 import { ChangePassword } from "@/src/components/ChangePassword";
 import { Builder } from "@/src/components/Builder";
-import { Plan2D } from "@/src/components/Plan2D";
 import { Estimator } from "@/src/components/Estimator";
 import { Offers } from "@/src/components/Offers";
 import { Cart } from "@/src/components/Cart";
@@ -17,6 +16,7 @@ import { Templates } from "@/src/components/Templates";
 import { Alerts } from "@/src/components/Alerts";
 import { Projects } from "@/src/components/Projects";
 import { View3D } from "@/src/components/View3D";
+import { planToRooms } from "@/src/utils/build3d";
 import { CepModal } from "@/src/components/CepModal";
 import { Onboarding } from "@/src/components/Onboarding";
 import type { CepData, Offer, Project, User } from "@/src/types";
@@ -30,12 +30,11 @@ export default function Index() {
   const styles = useMemo(() => buildStyles(colors), [colors]);
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<"home" | "builder" | "plan" | "3d" | "estimate" | "offers" | "cart" | "templates" | "alerts" | "projects" | "change-password">("home");
+  const [tab, setTab] = useState<"home" | "builder" | "3d" | "estimate" | "offers" | "cart" | "templates" | "alerts" | "projects" | "change-password">("home");
   const [project, setProject] = useState<Project | null>(null);
   const [cep, setCep] = useState<CepData | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showCepModal, setShowCepModal] = useState(false);
-  const [savingLayout, setSavingLayout] = useState(false);
   const [offerQuery, setOfferQuery] = useState<string | undefined>(undefined);
   const [toast, setToast] = useState<string>("");
 
@@ -88,7 +87,9 @@ export default function Index() {
   // layout" button in the 2D screen.
   const savePlan3D = async (plan: NonNullable<Project["plan"]>, floors: number) => {
     if (!project) return;
-    const updated = { ...project, plan, floors };
+    // Keep `rooms` in step so the estimate, the material list and the PDF reflect what
+    // the person actually built in 3D.
+    const updated = { ...project, plan, floors, rooms: planToRooms(plan) };
     if (project.project_id) {
       try {
         const saved = await request(`/projects/${project.project_id}`, {
@@ -104,27 +105,6 @@ export default function Index() {
     }
   };
 
-  const savePlanLayout = async (rooms: Project["rooms"]) => {
-    if (!project) return;
-    setSavingLayout(true);
-    try {
-      const updated = { ...project, rooms };
-      if (project.project_id) {
-        const saved = await request(`/projects/${project.project_id}`, {
-          method: "PUT",
-          body: JSON.stringify(updated),
-        });
-        setProject(saved);
-      } else {
-        setProject(updated);
-      }
-      setToast("Layout salvo");
-    } catch (e: any) {
-      setToast(e.message || "Não foi possível salvar");
-    } finally {
-      setSavingLayout(false);
-    }
-  };
 
   const addToCart = async (offer: Offer) => {
     try {
@@ -180,7 +160,7 @@ export default function Index() {
       } catch {
         setProject(payload as Project);
       }
-      setTab("plan");
+      setTab("3d");
     } catch {
       setToast("Não foi possível carregar o exemplo agora");
     }
@@ -202,22 +182,19 @@ export default function Index() {
           } catch {
             setProject(p as Project);
           }
-          setTab("plan");
+          setTab("3d");
         }}
       />
     );
-  } else if (tab === "plan" && project) {
+  } else if (tab === "3d" && project) {
     content = (
-      <Plan2D
+      <View3D
         project={project}
+        onBack={() => setTab("home")}
+        onSavePlan={savePlan3D}
         onNext={() => setTab("estimate")}
-        onSave={savePlanLayout}
-        saving={savingLayout}
-        onView3D={() => setTab("3d")}
       />
     );
-  } else if (tab === "3d" && project) {
-    content = <View3D project={project} onBack={() => setTab("plan")} onSavePlan={savePlan3D} />;
   } else if (tab === "estimate" && project) {
     content = (
       <Estimator
@@ -239,7 +216,7 @@ export default function Index() {
           } catch {
             setProject(p);
           }
-          setTab("plan");
+          setTab("3d");
         }}
       />
     );
@@ -251,7 +228,7 @@ export default function Index() {
         onBack={() => setTab("home")}
         onNew={() => { setProject(null); setTab("builder"); }}
         onTemplates={() => setTab("templates")}
-        onOpen={(p) => { setProject(p); setTab("plan"); }}
+        onOpen={(p) => { setProject(p); setTab("3d"); }}
       />
     );
   } else {

@@ -1,11 +1,4 @@
 export type User = { user_id: string; name: string; email: string };
-// A wall is now an addressable object, not just an implied edge of the rectangle.
-// "n" = top edge (-y), "s" = bottom (+y), "w" = left (-x), "e" = right (+x).
-// A side missing from `walls` means the person deleted that wall to open the space up.
-export type WallSide = "n" | "s" | "w" | "e";
-export type OpeningKind = "porta" | "janela";
-// `pos` is 0..1 along the wall (0.5 = centered); `width` is in metres.
-export type Opening = { id: string; side: WallSide; kind: OpeningKind; pos: number; width: number };
 export type Room = {
   name: string;
   width: number;
@@ -13,8 +6,6 @@ export type Room = {
   x?: number;
   y?: number;
   floor?: number;
-  walls?: WallSide[];
-  openings?: Opening[];
 };
 // A furniture piece inside a room: [kind, x, z, rotation]. x/z are metres relative to
 // the centre of the room, so moving the room carries its furniture along.

@@ -9,7 +9,7 @@ import type { PlanRoom, Project } from "@/src/types";
 
 // Web build uses a native <iframe> since react-native-webview doesn't render on web.
 // Metro auto-picks this file when bundling for web.
-export function View3D({ project, onBack, onSavePlan }: { project: Project; onBack: () => void; onSavePlan?: (plan: PlanRoom[], floors: number) => void | Promise<void> }) {
+export function View3D({ project, onBack, onSavePlan, onNext }: { project: Project; onBack: () => void; onSavePlan?: (plan: PlanRoom[], floors: number) => void | Promise<void>; onNext?: () => void }) {
   const { colors } = useTheme();
   const styles = useMemo(() => buildStyles(colors), [colors]);
   // Built once per mount: saving updates the project, and rebuilding the markup on every
@@ -45,6 +45,12 @@ export function View3D({ project, onBack, onSavePlan }: { project: Project; onBa
           <Text style={styles.title} numberOfLines={1}>{project.name}</Text>
           <Text style={styles.subtitle}>Maquete 3D · {project.width}×{project.length} m</Text>
         </View>
+        {onNext ? (
+          <Pressable testID="view3d-next" onPress={onNext} style={styles.nextBtn}>
+            <Text style={styles.nextText}>Materiais</Text>
+            <Icon name="chevron-forward" size={16} color={colors.white} />
+          </Pressable>
+        ) : null}
       </View>
       <View style={styles.frameWrap} testID="view3d-iframe">
         <iframe
@@ -73,6 +79,8 @@ function buildStyles(colors: typeof lightColors) {
   back: { width: 40, height: 40, alignItems: "center", justifyContent: "center", marginLeft: -8 },
   title: { color: colors.ink, fontSize: 17, fontWeight: "700" },
   subtitle: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  nextBtn: { flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: colors.brand, borderRadius: 999, paddingLeft: 14, paddingRight: 10, paddingVertical: 9 },
+  nextText: { color: colors.white, fontWeight: "700", fontSize: 13 },
   frameWrap: { flex: 1, backgroundColor: colors.bg },
 });
 }

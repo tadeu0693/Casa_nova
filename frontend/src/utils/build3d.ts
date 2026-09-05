@@ -30,6 +30,24 @@ export function roomsToPlan(rooms: Room[]): PlanRoom[] {
   });
 }
 
+// The 3D editor owns the `plan`, but the estimate, the material list and the PDF are all
+// computed from `rooms` on the backend. So every save projects the plan back down into
+// rooms — one direction only, plan is still the single source of truth. Outdoor areas
+// (lawn, deck, pool surround) are left out: they aren't built area and would inflate the
+// material count.
+export function planToRooms(plan: PlanRoom[]): Room[] {
+  return plan
+    .filter((r) => !r.ext && r.piso !== "grama")
+    .map((r) => ({
+      name: r.nome,
+      width: Number(r.w.toFixed(2)),
+      length: Number(r.d.toFixed(2)),
+      x: Number((r.cx - r.w / 2).toFixed(2)),
+      y: Number((r.cz - r.d / 2).toFixed(2)),
+      floor: r.f || 0,
+    }));
+}
+
 export function build3DHtml(project: Project): string {
   // An empty plan makes the scene load its own sample house, so old projects are
   // migrated here rather than showing someone else's floor plan.
