@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -19,6 +19,26 @@ export function View3D({ project, onBack, onSavePlan, onNext }: { project: Proje
   const initialProject = useRef(project);
   const html = useMemo(() => build3DHtml(initialProject.current), []);
   const [sharing, setSharing] = useState(false);
+  // The page carries three.js inside it, so it is ~800 KB. Handing that much markup to
+  // the WebView as a prop is unreliable — it is written to a file and loaded by URI
+  // instead, which is what a browser does with a page this size anyway.
+  const [pageUri, setPageUri] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const uri = `${FileSystem.cacheDirectory}maquete-3d.html`;
+        await FileSystem.writeAsStringAsync(uri, html);
+        if (!cancelled) setPageUri(uri);
+      } catch (e: any) {
+        // Falling back to the inline prop keeps the screen usable if the write fails.
+        if (!cancelled) setLoadError(`não foi possível preparar a página (${e?.message || e})`);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [html]);
 
   const handleMessage = async (event: any) => {
     try {
@@ -61,13 +81,22 @@ export function View3D({ project, onBack, onSavePlan, onNext }: { project: Proje
           </Pressable>
         ) : null}
       </View>
+      {loadError ? (
+        <View style={styles.errBox} testID="view3d-error">
+          <Text style={styles.errTitle}>Não foi possível abrir a maquete 3D</Text>
+          <Text style={styles.errText}>{loadError}</Text>
+        </View>
+      ) : null}
       <WebView
         testID="view3d-webview"
         originWhitelist={["*"]}
-        // three.js is embedded in the page, so nothing is fetched at runtime. The
-        // baseUrl stays anyway: without one Android loads the page as a data: URL with
-        // an opaque origin, which restricts several web APIs for no good reason.
-        source={{ html, baseUrl: "https://localhost/" }}
+        source={pageUri ? { uri: pageUri } : { html, baseUrl: "https://localhost/" }}
+        allowFileAccess
+        allowFileAccessFromFileURLs
+        allowUniversalAccessFromFileURLs
+        mixedContentMode="always"
+        onError={(e) => setLoadError(e.nativeEvent?.description || "falha ao abrir a página")}
+        onRenderProcessGone={() => setLoadError("a maquete consumiu memória demais e foi encerrada pelo sistema")}
         style={styles.web}
         javaScriptEnabled
         domStorageEnabled
@@ -108,6 +137,9 @@ function buildStyles(colors: typeof lightColors) {
   subtitle: { color: colors.muted, fontSize: 12, marginTop: 2 },
   nextBtn: { flexDirection: "row", alignItems: "center", gap: 2, backgroundColor: colors.brand, borderRadius: 999, paddingLeft: 14, paddingRight: 10, paddingVertical: 9 },
   nextText: { color: colors.white, fontWeight: "700", fontSize: 13 },
+  errBox: { margin: 16, padding: 14, borderRadius: 12, backgroundColor: colors.pale, borderWidth: 1, borderColor: colors.brand },
+  errTitle: { color: colors.brand, fontWeight: "700", fontSize: 14, textAlign: "center" },
+  errText: { color: colors.muted, fontSize: 12, marginTop: 6, textAlign: "center" },
   web: { flex: 1, backgroundColor: colors.bg },
   loading: { position: "absolute", inset: 0 as any, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
   loadingText: { color: colors.muted, fontSize: 13, fontWeight: "600" },

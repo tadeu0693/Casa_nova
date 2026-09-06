@@ -4,20 +4,27 @@
 //
 // Rode de novo só ao trocar a versão do three:  node scripts/gen-three-bundle.mjs
 import { execFileSync } from "node:child_process";
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { writeFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const dir = mkdtempSync(join(tmpdir(), "three-"));
 const entry = join(dir, "entry.js");
-// O namespace importado é imutável, então copiamos para um objeto próprio antes de
-// pendurar o OrbitControls nele.
+// Importa NOMINALMENTE só o que a cena usa, para o esbuild poder descartar o resto do
+// three. A lista sai do próprio código da cena, então nunca fica defasada.
+const used = new Set();
+for (const f of ["src/utils/scene3d.ts", "src/utils/furniture3d.ts"]) {
+  const src = readFileSync(f, "utf8");
+  for (const m of src.matchAll(/THREE\.([A-Za-z_$][\w$]*)/g)) used.add(m[1]);
+}
+used.delete("OrbitControls"); // vem do addon, não do core
+const names = [...used].sort();
 writeFileSync(entry, `
-import * as THREE_NS from "three";
+import { ${names.join(", ")} } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-const THREE = Object.assign({}, THREE_NS, { OrbitControls });
-window.THREE = THREE;
+window.THREE = { ${names.join(", ")}, OrbitControls };
 `);
+console.log("APIs usadas pela cena:", names.length);
 
 const out = join(dir, "bundle.js");
 // resolve "three" a partir do node_modules do projeto, não da pasta temporária
@@ -25,7 +32,6 @@ execFileSync("npx", ["--yes", "esbuild@0.21.5", entry, "--bundle", "--minify", "
   "--target=es2019", "--resolve-extensions=.js", "--outfile=" + out,
   "--alias:three=" + process.cwd() + "/node_modules/three"], { stdio: "inherit" });
 
-const { readFileSync } = await import("node:fs");
 const code = readFileSync(out, "utf8");
 const version = JSON.parse(readFileSync("node_modules/three/package.json", "utf8")).version;
 
