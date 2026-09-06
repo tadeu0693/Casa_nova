@@ -64,12 +64,10 @@ export function View3D({ project, onBack, onSavePlan, onNext }: { project: Proje
       <WebView
         testID="view3d-webview"
         originWhitelist={["*"]}
-        // A baseUrl is REQUIRED here. Without it Android loads the page as a data: URL,
-        // whose origin is opaque, and Chrome refuses to run <script type="module"> on
-        // data: URLs — the scene silently never starts and the canvas stays blank while
-        // the HUD renders fine. Pointing at the CDN's own origin also makes the module
-        // fetches same-origin.
-        source={{ html, baseUrl: "https://unpkg.com/" }}
+        // three.js is embedded in the page, so nothing is fetched at runtime. The
+        // baseUrl stays anyway: without one Android loads the page as a data: URL with
+        // an opaque origin, which restricts several web APIs for no good reason.
+        source={{ html, baseUrl: "https://localhost/" }}
         style={styles.web}
         javaScriptEnabled
         domStorageEnabled

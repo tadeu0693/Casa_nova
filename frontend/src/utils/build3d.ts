@@ -1,4 +1,5 @@
 import { FURNITURE_LIB_JS } from "@/src/utils/furniture3d";
+import { THREE_BUNDLE_JS } from "@/src/utils/three-bundle";
 import { SCENE_JS } from "@/src/utils/scene3d";
 import type { PlanRoom, Project, Room } from "@/src/types";
 
@@ -258,19 +259,10 @@ export function build3DHtml(project: Project): string {
       <div id="grid"></div>
     </div>
 </div>
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
-    "three/addons/controls/OrbitControls.js": "https://unpkg.com/three@0.184.0/examples/jsm/controls/OrbitControls.js"
-  }
-}
-</script>
 <script>
   window.PROJECT_PLAN = ${plan};
   window.PROJECT_FLOORS = ${floors};
-</script>
-<script>
+  // A blank canvas gives nothing to go on, so any failure is surfaced on screen.
   window.__failed = function (msg) {
     var el = document.getElementById("loaderr");
     if (!el) return;
@@ -278,23 +270,16 @@ export function build3DHtml(project: Project): string {
     el.querySelector("i").textContent = msg || "erro desconhecido";
   };
   window.addEventListener("error", function (e) {
-    if (e && e.target && e.target.tagName === "SCRIPT") window.__failed("não foi possível carregar o three.js");
-    else if (e && e.message) window.__failed(e.message);
+    if (e && e.message) window.__failed(e.message);
   }, true);
-  // If the scene never draws, say so instead of leaving a blank screen.
   setTimeout(function () {
-    if (!window.__sceneReady) window.__failed("a biblioteca 3D não carregou — verifique a conexão");
+    if (!window.__sceneReady) window.__failed("a cena não terminou de montar");
   }, 12000);
 </script>
-<script type="module">
-  import * as THREE from "three";
-  // Aliased on import: SCENE_JS declares its own top-level "const OrbitControls", and
-  // both live in this same module scope — importing under that name is a duplicate
-  // declaration, which kills the whole module before a single line runs.
-  import { OrbitControls as OrbitControlsImpl } from "three/addons/controls/OrbitControls.js";
-  THREE.OrbitControls = OrbitControlsImpl;
-  window.THREE = THREE;
-
+<!-- three.js vai embutido no app: nada de CDN, nada de import map, funciona sem internet -->
+<script>${THREE_BUNDLE_JS}</script>
+<script>
+  if (!window.THREE) window.__failed("three.js não inicializou");
   ${FURNITURE_LIB_JS}
   ${SCENE_JS}
   window.__sceneReady = true;
