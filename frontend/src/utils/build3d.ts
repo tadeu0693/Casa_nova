@@ -288,8 +288,11 @@ export function build3DHtml(project: Project): string {
 </script>
 <script type="module">
   import * as THREE from "three";
-  import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-  THREE.OrbitControls = OrbitControls;
+  // Aliased on import: SCENE_JS declares its own top-level "const OrbitControls", and
+  // both live in this same module scope — importing under that name is a duplicate
+  // declaration, which kills the whole module before a single line runs.
+  import { OrbitControls as OrbitControlsImpl } from "three/addons/controls/OrbitControls.js";
+  THREE.OrbitControls = OrbitControlsImpl;
   window.THREE = THREE;
 
   ${FURNITURE_LIB_JS}
