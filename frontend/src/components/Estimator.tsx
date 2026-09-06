@@ -44,7 +44,7 @@ export function Estimator({
 
   const exportPdf = async () => {
     if (!project.project_id) {
-      Alert.alert("Salve o projeto primeiro", "Volte e toque em \"Salvar layout\" na Planta 2D antes de exportar o PDF.");
+      Alert.alert("Salve o projeto primeiro", "Volte para a maquete 3D e faça um ajuste: o projeto é salvo sozinho antes de exportar o PDF.");
       return;
     }
     setExporting(true);

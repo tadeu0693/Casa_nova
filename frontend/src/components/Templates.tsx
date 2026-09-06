@@ -97,7 +97,7 @@ export function Templates({ onPick, onBack }: { onPick: (project: Project) => vo
       <View style={styles.hint}>
         <Icon name="bulb-outline" size={16} color={colors.blue} />
         <Text style={styles.hintText}>
-          Escolha um modelo e ajuste medidas, cômodos ou renomeie tudo depois no editor 2D.
+          Escolha um modelo e ajuste medidas, cômodos ou renomeie tudo depois na maquete 3D.
         </Text>
       </View>
     </Screen>

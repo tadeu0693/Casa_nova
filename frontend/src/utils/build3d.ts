@@ -79,7 +79,10 @@ export function build3DHtml(project: Project): string {
     padding:5px 9px;text-align:center;backdrop-filter:blur(8px);white-space:nowrap;transition:opacity .25s}
   .lbl b{display:block;font-size:11.5px;font-weight:700;line-height:1.15}
   .lbl i{display:block;font-size:10px;color:var(--muted);font-style:normal;margin-top:1px}
-  .hud{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap;pointer-events:none}
+  .hud{position:absolute;top:12px;left:0;right:0;padding:0 12px;display:flex;gap:8px;flex-wrap:nowrap;
+    overflow-x:auto;overflow-y:hidden;pointer-events:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .hud::-webkit-scrollbar{display:none}
+  .hud>*{flex:0 0 auto}
   .pill{pointer-events:auto;border:1px solid var(--line);background:rgba(248,247,244,.85);backdrop-filter:blur(12px);
     border-radius:999px;padding:8px 14px;font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;min-height:36px;white-space:nowrap}
   .pill.on{background:var(--brand);border-color:var(--brand);color:#fff}
@@ -88,10 +91,14 @@ export function build3DHtml(project: Project): string {
   .seg button{border:none;background:transparent;border-radius:999px;padding:0 12px;height:30px;
     font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;font-family:inherit}
   .seg button.on{background:var(--brand);color:#fff}
-  .metaline{position:absolute;right:12px;bottom:14px;font-size:11.5px;color:var(--muted);
+  #loaderr{display:none;position:absolute;left:16px;right:16px;top:50%;transform:translateY(-50%);
+    background:var(--pale);border:1px solid var(--brand);border-radius:14px;padding:14px 16px;text-align:center}
+  #loaderr b{display:block;font-size:14px;color:var(--brand)}
+  #loaderr i{display:block;font-size:11.5px;color:var(--muted);font-style:normal;margin-top:6px;word-break:break-word}
+  .metaline{position:absolute;right:12px;bottom:28px;font-size:11.5px;color:var(--muted);
     background:rgba(248,247,244,.85);padding:7px 11px;border-radius:999px;backdrop-filter:blur(8px);
     white-space:nowrap;max-width:60%;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
-  #tip{position:absolute;left:12px;bottom:14px;font-size:11.5px;color:var(--muted);background:rgba(248,247,244,.85);
+  #tip{position:absolute;left:12px;bottom:28px;font-size:11.5px;color:var(--muted);background:rgba(248,247,244,.85);
     padding:7px 11px;border-radius:999px;backdrop-filter:blur(8px)}
   #roomcard{position:absolute;left:12px;right:12px;bottom:12px;display:none;align-items:center;gap:8px;
     background:rgba(26,26,26,.93);color:#fff;border-radius:18px;padding:10px 10px;backdrop-filter:blur(14px);z-index:5}
@@ -187,6 +194,7 @@ export function build3DHtml(project: Project): string {
 <div class="stage">
     <canvas id="c"></canvas>
     <div id="meta" class="metaline"></div>
+    <div id="loaderr"><b>Não foi possível abrir a maquete 3D</b><i></i></div>
     <div id="labels"></div>
     <div class="hud">
       <button class="pill on" id="btnRoof">Telhado</button>
@@ -262,6 +270,22 @@ export function build3DHtml(project: Project): string {
   window.PROJECT_PLAN = ${plan};
   window.PROJECT_FLOORS = ${floors};
 </script>
+<script>
+  window.__failed = function (msg) {
+    var el = document.getElementById("loaderr");
+    if (!el) return;
+    el.style.display = "block";
+    el.querySelector("i").textContent = msg || "erro desconhecido";
+  };
+  window.addEventListener("error", function (e) {
+    if (e && e.target && e.target.tagName === "SCRIPT") window.__failed("não foi possível carregar o three.js");
+    else if (e && e.message) window.__failed(e.message);
+  }, true);
+  // If the scene never draws, say so instead of leaving a blank screen.
+  setTimeout(function () {
+    if (!window.__sceneReady) window.__failed("a biblioteca 3D não carregou — verifique a conexão");
+  }, 12000);
+</script>
 <script type="module">
   import * as THREE from "three";
   import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -270,6 +294,7 @@ export function build3DHtml(project: Project): string {
 
   ${FURNITURE_LIB_JS}
   ${SCENE_JS}
+  window.__sceneReady = true;
 
   // Sharing keeps working: the renderer is created with preserveDrawingBuffer, so the
   // canvas can be read back straight into the app's existing screenshot flow.

@@ -87,7 +87,7 @@ export function Home({ user, go, cep, onEditCep, onLogout, onLoadExample }: { us
         <Action styles={styles} colors={colors} testID="home-tile-templates" icon="sparkles-outline" title="Modelos prontos" text="Kitnet, Casa, Sobrado" onPress={() => go("templates")} />
       </View>
       <View style={[styles.tiles, { marginTop: 12 }]}>
-        <Action styles={styles} colors={colors} testID="home-tile-plan" icon="grid-outline" title="Planta 2D" text="Desenhe seus cômodos" onPress={() => go("builder")} />
+        <Action styles={styles} colors={colors} testID="home-tile-plan" icon="cube-outline" title="Maquete 3D" text="Monte e mobilie a casa" onPress={() => go("builder")} />
         <Action styles={styles} colors={colors} testID="home-tile-offers" icon="pricetag-outline" title="Ofertas" text="Compare por CEP" onPress={() => go("offers")} />
       </View>
       <View style={[styles.tiles, { marginTop: 12 }]}>
@@ -96,7 +96,7 @@ export function Home({ user, go, cep, onEditCep, onLogout, onLoadExample }: { us
       </View>
       <Text style={styles.sectionTitle}>Como funciona</Text>
       <View style={styles.step}>
-        <Step styles={styles} n="01" title="Defina seus cômodos" text="Arraste e redimensione no editor 2D." />
+        <Step styles={styles} n="01" title="Defina seus cômodos" text="Arraste e redimensione direto na maquete 3D." />
         <Step styles={styles} n="02" title="Gere a lista" text="Materiais e quantidades calculadas." />
         <Step styles={styles} n="03" title="Compare e economize" text="Preço + frete real por região." />
       </View>

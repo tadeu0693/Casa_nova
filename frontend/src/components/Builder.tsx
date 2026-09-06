@@ -316,7 +316,7 @@ export function Builder({
 
       <Button
         testID="builder-next"
-        title="Ver planta 2D"
+        title="Visualizar em 3D"
         onPress={() =>
           onDone({
             name: projectName,
