@@ -41,7 +41,6 @@ export function roomsToPlan(rooms: Room[]): PlanRoom[] {
 
   const montar = (largura: number) => {
     const andares = new Map<number, { itens: { r: Room; i: number }[]; d: number }[]>();
-    let area = 0;
     floors.forEach((f) => {
       // Agrupados por profundidade: numa fileira, todo cômodo é esticado até a
       // profundidade do mais fundo. Misturando um cômodo de 2 m com um de 4 m, o de 2 m
@@ -66,9 +65,11 @@ export function roomsToPlan(rooms: Room[]): PlanRoom[] {
       });
       if (atual.itens.length) fileiras.push(atual);
       andares.set(f, fileiras);
-      area += fileiras.reduce((a, fl) => a + largura * fl.d, 0);
     });
+    // Todos os andares terminam com a mesma profundidade, então a área real é
+    // largura × profundidade × número de andares.
     const prof = Math.max(1, ...[...andares.values()].map((fs) => fs.reduce((a, fl) => a + fl.d, 0)));
+    const area = largura * prof * andares.size;
     return { andares, area, prof };
   };
 
@@ -97,17 +98,19 @@ export function roomsToPlan(rooms: Room[]): PlanRoom[] {
   // de cada cômodo é preservada na proporção.
   const { andares: porAndar } = montar(rowMax);
 
-  // Cada andar mantém a PRÓPRIA profundidade. Igualar também a profundidade deixaria os
-  // dois pavimentos idênticos, mas inflaria a área do de cima (e com ela o orçamento);
-  // o telhado é que passa a cobrir a casa inteira, então nada fica descoberto.
+  // Todos os andares na MESMA profundidade: as fileiras do pavimento mais raso são
+  // esticadas até fechar a pegada do mais fundo. Assim o andar de cima cobre o de baixo
+  // inteiro, em vez de deixar um pedaço do térreo só com laje. Isso aumenta a área dos
+  // cômodos de cima — é o preço de encaixar um andar no outro.
   const profMax = Math.max(1, ...[...porAndar.values()].map((fs) => fs.reduce((a, r) => a + r.d, 0)));
 
   let bbox = { x0: -rowMax / 2, x1: rowMax / 2, z0: -profMax / 2, z1: profMax / 2 };
   porAndar.forEach((fileiras, f) => {
-    const prof = fileiras.reduce((a, r) => a + r.d, 0) || 1;
-    let z = -prof / 2;
+    const profBruta = fileiras.reduce((a, r) => a + r.d, 0) || 1;
+    const fatorZ = profMax / profBruta;
+    let z = -profMax / 2;
     fileiras.forEach((fileira) => {
-      const d = Number(fileira.d.toFixed(2));
+      const d = Number((fileira.d * fatorZ).toFixed(2));
       const somaW = fileira.itens.reduce((a, { r }) => a + r.width, 0) || 1;
       const fatorX = rowMax / somaW;
       let x = -rowMax / 2;
@@ -186,9 +189,10 @@ export function planToRooms(plan: PlanRoom[]): Room[] {
 //   1 · rooms laid out with gaps — rendered as a scatter of loose boxes
 //   2 · rooms packed edge to edge, floors centred
 //   3 · pool/grill/garage/yard become outdoor areas around the house
-//   4 · rooms are resized to tile each floor into a clean rectangle of one shared width,
-//       so floors line up and nothing juts out
-export const PLAN_VERSION = 4;
+//   4 · rooms are resized to tile each floor into a clean rectangle of one shared width
+//   5 · every floor gets the same footprint, so an upper storey covers the one below it
+//       completely instead of leaving part of the ground floor capped by a bare slab
+export const PLAN_VERSION = 5;
 
 export function build3DHtml(project: Project): string {
   // An empty plan makes the scene load its own sample house, so old projects are
@@ -245,10 +249,11 @@ export function build3DHtml(project: Project): string {
     background:rgba(26,26,26,.93);color:#fff;border-radius:18px;padding:10px 10px;backdrop-filter:blur(14px);z-index:5}
   #roomcard.show{display:flex}
   #roomcard.slim{bottom:auto;top:56px;left:12px;right:12px}
-  #roomcard .t{flex:1;min-width:0}
+  #roomcard .t{flex:1;min-width:52px}
+  #roomcard #rcdel{background:rgba(200,90,50,.55)}
   #roomcard b{display:block;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #roomcard span{display:block;font-size:11px;color:#B9B6B0;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #roomcard button{border:none;background:rgba(255,255,255,.15);color:#fff;border-radius:12px;height:44px;padding:0 13px;
+  #roomcard button{border:none;background:rgba(255,255,255,.15);color:#fff;border-radius:12px;height:44px;padding:0 11px;flex:0 0 auto;
     font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap}
   #btnEdit.done{background:var(--brand)}
 
@@ -348,7 +353,9 @@ export function build3DHtml(project: Project): string {
     <div id="tip">Toque num cômodo para mobiliar · &quot;Planta&quot; para mover e redimensionar</div>
     <div id="roomcard">
       <div class="t"><b id="rcname"></b><span id="rcdim"></span></div>
-      <button id="btnEdit">Editar</button>
+      <button id="btnEdit">Mobiliar</button>
+      <button id="rcmove">Mover</button>
+      <button id="rcdel">Excluir</button>
       <button id="rcback">Sair</button>
     </div>
     <div id="toast"></div>
@@ -422,6 +429,30 @@ export function build3DHtml(project: Project): string {
   if (!window.THREE) window.__failed("three.js não inicializou");
   ${FURNITURE_LIB_JS}
   ${SCENE_JS}
+  // "Mover" leva o cômodo aberto para o modo Planta já selecionado, e "Excluir" apaga o
+  // cômodo inteiro. Sem estes dois, a única porta de entrada era descobrir sozinho o
+  // botão Planta no topo — e de dentro do cômodo só dava para mexer nos móveis.
+  (function () {
+    const card = document.getElementById("rcmove");
+    const del = document.getElementById("rcdel");
+    if (card) card.onclick = function () {
+      const r = current;
+      if (!r) return;
+      exitRoom();
+      setPlanEdit(true);
+      if (r.f !== undefined && !r.ext) floorView = r.f;
+      selectRoom(r);
+      applyView();
+      toast("Arraste o cômodo para movê-lo");
+    };
+    if (del) del.onclick = function () {
+      const r = current;
+      if (!r) return;
+      exitRoom();
+      deleteRoom(r);
+    };
+  })();
+
   window.__sceneReady = true;
 
   // Sharing keeps working: the renderer is created with preserveDrawingBuffer, so the
