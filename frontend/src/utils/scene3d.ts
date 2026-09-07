@@ -344,7 +344,10 @@ function makeRoof(topF) {
     casa.remove(telhado);
     telhado = null;
   }
-  const rooms = built().filter(r => r.f === topF);
+  // Cobre a pegada da casa INTEIRA, não só a do último pavimento: quando o térreo é
+  // maior que o andar de cima, seus cômodos ficavam sem cobertura, aparecendo como
+  // caixas abertas ao redor do telhado.
+  const rooms = built();
   if (!rooms.length) return;
   let x1 = Infinity, x2 = -Infinity, z1 = Infinity, z2 = -Infinity;
   for (const r of rooms) {

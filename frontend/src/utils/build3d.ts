@@ -33,61 +33,102 @@ export function roomsToPlan(rooms: Room[]): PlanRoom[] {
   const out: PlanRoom[] = [];
   const floors = [...new Set(dentro.map(({ r }) => r.floor || 0))].sort((a, b) => a - b);
 
-  // A largura das fileiras sai da área do MAIOR andar; depois que o térreo é montado, os
-  // andares de cima passam a usar a largura real dele como limite. Sem isso um pavimento
-  // superior com cômodos largos ficava mais largo que o térreo e sobrava no ar, que é o
-  // que aparecia na maquete.
-  const areaDoAndar = (f: number) =>
-    dentro.filter(({ r }) => (r.floor || 0) === f).reduce((a, { r }) => a + r.width * r.length, 0);
-  const maiorArea = Math.max(0, ...floors.map(areaDoAndar));
-  const rowMax = Math.max(
-    ...dentro.map(({ r }) => r.width),
-    Math.sqrt(Math.max(maiorArea, 1) * 1.6),
-  );
+  // Esticar as fileiras muda a área dos cômodos, então a largura da casa não é chutada:
+  // várias larguras são testadas e fica a que menos distorce a metragem digitada. Sem
+  // isto a área construída inflava mais de 30%, e com ela o orçamento de materiais.
+  const larguraMin = Math.max(...dentro.map(({ r }) => r.width), 2);
+  const areaOriginal = dentro.reduce((a, { r }) => a + r.width * r.length, 0) || 1;
 
-  let bbox = { x0: 0, x1: 0, z0: 0, z1: 0 };
-  let limite = rowMax; // vai virar a largura real do térreo depois do primeiro andar
-  floors.forEach((f, ordem) => {
-    const onFloor = dentro.filter(({ r }) => (r.floor || 0) === f);
-    if (!onFloor.length) return;
-    const placed: { room: PlanRoom; x: number; z: number }[] = [];
-    let cursorX = 0, cursorZ = 0, rowD = 0;
-    onFloor.forEach(({ r, i }) => {
-      if (cursorX > 0 && cursorX + r.width > limite) { cursorX = 0; cursorZ += rowD; rowD = 0; }
-      const room: PlanRoom = {
-        id: r.name.toLowerCase().replace(/\s+/g, "_") + "_" + i,
-        nome: r.name,
-        f,
-        w: r.width,
-        d: r.length,
-        cx: 0,
-        cz: 0,
-        piso: PISO[r.name.toLowerCase()] || "madeira",
-        tipo: SACADAS.test(r.name) ? "sacada" : /circula|corredor|hall/i.test(r.name) ? "circ" : null,
-        items: [],
-      };
-      placed.push({ room, x: cursorX + r.width / 2, z: cursorZ + r.length / 2 });
-      cursorX += r.width;
-      rowD = Math.max(rowD, r.length);
+  const montar = (largura: number) => {
+    const andares = new Map<number, { itens: { r: Room; i: number }[]; d: number }[]>();
+    let area = 0;
+    floors.forEach((f) => {
+      // Agrupados por profundidade: numa fileira, todo cômodo é esticado até a
+      // profundidade do mais fundo. Misturando um cômodo de 2 m com um de 4 m, o de 2 m
+      // dobra de tamanho — era a maior fonte de inflação da área.
+      const onFloor = dentro
+        .filter(({ r }) => (r.floor || 0) === f)
+        .slice()
+        .sort((a, b) => b.r.length - a.r.length);
+      if (!onFloor.length) return;
+      const fileiras: { itens: { r: Room; i: number }[]; d: number }[] = [];
+      let atual = { itens: [] as { r: Room; i: number }[], d: 0 };
+      let acc = 0;
+      onFloor.forEach((entry) => {
+        if (atual.itens.length && acc + entry.r.width > largura) {
+          fileiras.push(atual);
+          atual = { itens: [], d: 0 };
+          acc = 0;
+        }
+        atual.itens.push(entry);
+        atual.d = Math.max(atual.d, entry.r.length);
+        acc += entry.r.width;
+      });
+      if (atual.itens.length) fileiras.push(atual);
+      andares.set(f, fileiras);
+      area += fileiras.reduce((a, fl) => a + largura * fl.d, 0);
     });
+    const prof = Math.max(1, ...[...andares.values()].map((fs) => fs.reduce((a, fl) => a + fl.d, 0)));
+    return { andares, area, prof };
+  };
 
-    // Cada andar centrado no mesmo ponto, para empilharem alinhados.
-    const minX = Math.min(...placed.map((p) => p.x - p.room.w / 2));
-    const maxX = Math.max(...placed.map((p) => p.x + p.room.w / 2));
-    const minZ = Math.min(...placed.map((p) => p.z - p.room.d / 2));
-    const maxZ = Math.max(...placed.map((p) => p.z + p.room.d / 2));
-    const ox = (minX + maxX) / 2, oz = (minZ + maxZ) / 2;
-    // O térreo define a pegada; os andares acima não podem passar dela.
-    if (ordem === 0) limite = Math.max(...onFloor.map(({ r }) => r.width), maxX - minX);
-    placed.forEach(({ room, x, z }) => {
-      room.cx = Number((x - ox).toFixed(2));
-      room.cz = Number((z - oz).toFixed(2));
-      out.push(room);
+  // O formato entra como REGRA, não como peso: descarta larguras que dariam uma casa em
+  //formato de vagão, e entre as que sobram fica a que menos distorce a metragem. Como peso, um
+  // caso puxava o outro e a área chegava a inflar 40%.
+  let rowMax = 0;
+  let melhor = Infinity;
+  let reserva = larguraMin, melhorReserva = Infinity;
+  for (let w = larguraMin; w <= larguraMin + 14; w += 0.1) {
+    const { area, prof } = montar(w);
+    if (!area) continue;
+    const erro = Math.abs(area - areaOriginal) / areaOriginal;
+    const proporcao = w / prof;
+    if (erro < melhorReserva - 0.001) { melhorReserva = erro; reserva = Number(w.toFixed(2)); }
+    if (proporcao < 0.55 || proporcao > 1.9) continue;
+    if (erro < melhor - 0.001) { melhor = erro; rowMax = Number(w.toFixed(2)); }
+  }
+  if (!rowMax) rowMax = reserva;
+
+  // Os cômodos são AJUSTADOS para encaixar: cada fileira é esticada até fechar a largura
+  // da casa e todas as fileiras de um andar ficam alinhadas. Depois os andares são
+  // igualados na mesma profundidade. O resultado é um retângulo limpo por pavimento, com
+  // o de cima assentando exatamente sobre o de baixo — sem cômodo sobrando para fora nem
+  // recorte serrilhado. As medidas mudam um pouco em relação ao que foi digitado; a área
+  // de cada cômodo é preservada na proporção.
+  const { andares: porAndar } = montar(rowMax);
+
+  // Cada andar mantém a PRÓPRIA profundidade. Igualar também a profundidade deixaria os
+  // dois pavimentos idênticos, mas inflaria a área do de cima (e com ela o orçamento);
+  // o telhado é que passa a cobrir a casa inteira, então nada fica descoberto.
+  const profMax = Math.max(1, ...[...porAndar.values()].map((fs) => fs.reduce((a, r) => a + r.d, 0)));
+
+  let bbox = { x0: -rowMax / 2, x1: rowMax / 2, z0: -profMax / 2, z1: profMax / 2 };
+  porAndar.forEach((fileiras, f) => {
+    const prof = fileiras.reduce((a, r) => a + r.d, 0) || 1;
+    let z = -prof / 2;
+    fileiras.forEach((fileira) => {
+      const d = Number(fileira.d.toFixed(2));
+      const somaW = fileira.itens.reduce((a, { r }) => a + r.width, 0) || 1;
+      const fatorX = rowMax / somaW;
+      let x = -rowMax / 2;
+      fileira.itens.forEach(({ r, i }) => {
+        const w = Number((r.width * fatorX).toFixed(2));
+        out.push({
+          id: r.name.toLowerCase().replace(/\s+/g, "_") + "_" + i,
+          nome: r.name,
+          f,
+          w,
+          d,
+          cx: Number((x + w / 2).toFixed(2)),
+          cz: Number((z + d / 2).toFixed(2)),
+          piso: PISO[r.name.toLowerCase()] || "madeira",
+          tipo: SACADAS.test(r.name) ? "sacada" : /circula|corredor|hall/i.test(r.name) ? "circ" : null,
+          items: [],
+        });
+        x += w;
+      });
+      z += d;
     });
-    bbox = {
-      x0: Math.min(bbox.x0, minX - ox), x1: Math.max(bbox.x1, maxX - ox),
-      z0: Math.min(bbox.z0, minZ - oz), z1: Math.max(bbox.z1, maxZ - oz),
-    };
   });
 
   // Áreas externas ficam EM VOLTA da casa, nunca dentro do bloco construído: alternando
@@ -144,9 +185,10 @@ export function planToRooms(plan: PlanRoom[]): Room[] {
 // rebuilt from `rooms` instead of being trusted.
 //   1 · rooms laid out with gaps — rendered as a scatter of loose boxes
 //   2 · rooms packed edge to edge, floors centred
-//   3 · pool/grill/garage/yard become outdoor areas around the house, and upper floors
-//       are kept within the ground floor's footprint
-export const PLAN_VERSION = 3;
+//   3 · pool/grill/garage/yard become outdoor areas around the house
+//   4 · rooms are resized to tile each floor into a clean rectangle of one shared width,
+//       so floors line up and nothing juts out
+export const PLAN_VERSION = 4;
 
 export function build3DHtml(project: Project): string {
   // An empty plan makes the scene load its own sample house, so old projects are
@@ -303,7 +345,7 @@ export function build3DHtml(project: Project): string {
       <button class="pill" id="btnShare">Compartilhar</button>
       <div class="seg" id="segFloors"></div>
     </div>
-    <div id="tip">Toque num cômodo para entrar e mobiliar</div>
+    <div id="tip">Toque num cômodo para mobiliar · &quot;Planta&quot; para mover e redimensionar</div>
     <div id="roomcard">
       <div class="t"><b id="rcname"></b><span id="rcdim"></span></div>
       <button id="btnEdit">Editar</button>
