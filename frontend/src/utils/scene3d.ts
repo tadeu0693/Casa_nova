@@ -258,6 +258,27 @@ function neighborOf(r, e, len) {
   return PLAN.find(o => o !== r && !o.ext && o.f === r.f && o.visible !== false && inside(o, p.x, p.z));
 }
 
+function makeCeil(r) {
+  if (r.ceil) {
+    r.g.remove(r.ceil);
+    r.ceil.geometry.dispose();
+    r.ceil = null;
+  }
+  if (r.ext || r.visible === false) return;
+  // No último pavimento quem cobre é o telhado.
+  if (r.f >= floors - 1) return;
+  // Se há um cômodo logo acima, a laje dele já serve de teto para este.
+  const coberto = built().some(o =>
+    o.f === r.f + 1 && o.visible !== false &&
+    Math.min(o.cx + o.w / 2, r.cx + r.w / 2) - Math.max(o.cx - o.w / 2, r.cx - r.w / 2) > r.w - 0.06 &&
+    Math.min(o.cz + o.d / 2, r.cz + r.d / 2) - Math.max(o.cz - o.d / 2, r.cz - r.d / 2) > r.d - 0.06);
+  if (coberto) return;
+  const c = box(r.w, LAJE, r.d, M.parede, 0, WH + LAJE / 2, 0, 'lajeCobertura');
+  c.receiveShadow = true;
+  r.g.add(c);
+  r.ceil = c;
+}
+
 function buildWalls(r) {
   const g = r.wallsG;
   while (g.children.length) {
@@ -449,7 +470,10 @@ function applyStructure() {
   }
   if (current && !current.visible) exitRoom();
   for (const r of built()) if (r.stair) r.stair.visible = r.f + 1 < floors;
-  for (const r of built()) if (r.visible) buildWalls(r);
+  // makeCeil roda para TODOS, inclusive os invisíveis: ao reduzir o número de pavimentos,
+  // um cômodo que sai de cena precisa perder a laje, senão ela fica pendurada no ar
+  // quando o andar volta.
+  for (const r of built()) { if (r.visible) buildWalls(r); makeCeil(r); }
   makeRoof(floors - 1);
   renderFloorSeg();
   applyView();
@@ -802,6 +826,8 @@ $('protate').onclick = () => {
 };
 function refreshFloor(r) {
   for (const o of built()) if (o.f === r.f && o.visible !== false) buildWalls(o);
+  // A laje depende do que existe no andar de cima e no de baixo, então revê os dois.
+  for (const o of built()) if (Math.abs(o.f - r.f) <= 1 && o.visible !== false) makeCeil(o);
   if (r.f === floors - 1 || !r.ext) makeRoof(floors - 1);
   applyView();
 }
@@ -881,6 +907,7 @@ function deleteRoom(r) {
   selectRoom(null);
   const f = r.f;
   for (const o of built()) if (o.f === f && o.visible !== false) buildWalls(o);
+  for (const o of built()) if (Math.abs(o.f - f) <= 1 && o.visible !== false) makeCeil(o);
   makeRoof(floors - 1);
   applyView();
   $('meta').textContent = metaText();
