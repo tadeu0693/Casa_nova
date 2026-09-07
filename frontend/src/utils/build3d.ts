@@ -6,30 +6,54 @@ import type { PlanRoom, Project, Room } from "@/src/types";
 // Older projects were stored as `rooms` (name + width + length, no position in the
 // world). They get converted once, the first time the 3D screen opens, by laying the
 // rooms out in rows — a starting point the person then arranges in plan mode.
+// Ambientes que não são cômodo fechado: entram como área externa (sem paredes nem laje)
+// e já nascem com a peça que os define. Sem isto, "Piscina" virava uma caixa de alvenaria
+// com janelas — que foi o que apareceu na maquete.
+const EXTERNOS: { re: RegExp; piso: PlanRoom["piso"]; itens: string[] }[] = [
+  { re: /piscina/i, piso: "deck", itens: ["piscina", "espreguicadeira"] },
+  { re: /jacuzzi|ofur[oó]/i, piso: "deck", itens: ["jacuzzi"] },
+  { re: /churrasq|gourmet/i, piso: "pedra", itens: ["churrasqueira", "mesaExterna"] },
+  { re: /garagem|vaga/i, piso: "pedra", itens: ["carro"] },
+  { re: /quintal|jardim|gramado/i, piso: "grama", itens: ["arvore", "rede"] },
+  { re: /deck|p[eé]rgola|pergolado/i, piso: "deck", itens: ["pergolado", "sofaExterno"] },
+];
+
+// Sacada e varanda continuam presas à casa (têm laje e guarda-corpo), não são área solta.
+const SACADAS = /sacada|varanda|terra[cç]o/i;
+
 export function roomsToPlan(rooms: Room[]): PlanRoom[] {
   const PISO: Record<string, PlanRoom["piso"]> = {
     cozinha: "frio", banheiro: "frio", lavabo: "frio", area: "frio",
   };
-  const floors = [...new Set(rooms.map((r) => r.floor || 0))].sort((a, b) => a - b);
+  const externoDe = (nome: string) => EXTERNOS.find((e) => e.re.test(nome));
+
+  const dentro = rooms.map((r, i) => ({ r, i })).filter(({ r }) => !externoDe(r.name));
+  const fora = rooms.map((r, i) => ({ r, i })).filter(({ r }) => externoDe(r.name));
+
   const out: PlanRoom[] = [];
+  const floors = [...new Set(dentro.map(({ r }) => r.floor || 0))].sort((a, b) => a - b);
 
-  floors.forEach((f) => {
-    const onFloor = rooms.map((r, i) => ({ r, i })).filter(({ r }) => (r.floor || 0) === f);
+  // A largura das fileiras sai da área do MAIOR andar; depois que o térreo é montado, os
+  // andares de cima passam a usar a largura real dele como limite. Sem isso um pavimento
+  // superior com cômodos largos ficava mais largo que o térreo e sobrava no ar, que é o
+  // que aparecia na maquete.
+  const areaDoAndar = (f: number) =>
+    dentro.filter(({ r }) => (r.floor || 0) === f).reduce((a, { r }) => a + r.width * r.length, 0);
+  const maiorArea = Math.max(0, ...floors.map(areaDoAndar));
+  const rowMax = Math.max(
+    ...dentro.map(({ r }) => r.width),
+    Math.sqrt(Math.max(maiorArea, 1) * 1.6),
+  );
+
+  let bbox = { x0: 0, x1: 0, z0: 0, z1: 0 };
+  let limite = rowMax; // vai virar a largura real do térreo depois do primeiro andar
+  floors.forEach((f, ordem) => {
+    const onFloor = dentro.filter(({ r }) => (r.floor || 0) === f);
     if (!onFloor.length) return;
-
-    // Rows are packed edge to edge, with NO gap: the rooms of a house share walls. The
-    // old layout left 0.3 m between them, which is why the maquette came out as a
-    // scatter of loose boxes instead of one building.
-    const area = onFloor.reduce((a, { r }) => a + r.width * r.length, 0);
-    // A row a bit wider than the square root of the total area keeps the block roughly
-    // square. Sized too tightly, one big room fills a row on its own and the house comes
-    // out as a long narrow strip.
-    const rowMax = Math.max(...onFloor.map(({ r }) => r.width), Math.sqrt(area * 1.6));
-
     const placed: { room: PlanRoom; x: number; z: number }[] = [];
     let cursorX = 0, cursorZ = 0, rowD = 0;
     onFloor.forEach(({ r, i }) => {
-      if (cursorX > 0 && cursorX + r.width > rowMax) { cursorX = 0; cursorZ += rowD; rowD = 0; }
+      if (cursorX > 0 && cursorX + r.width > limite) { cursorX = 0; cursorZ += rowD; rowD = 0; }
       const room: PlanRoom = {
         id: r.name.toLowerCase().replace(/\s+/g, "_") + "_" + i,
         nome: r.name,
@@ -39,7 +63,7 @@ export function roomsToPlan(rooms: Room[]): PlanRoom[] {
         cx: 0,
         cz: 0,
         piso: PISO[r.name.toLowerCase()] || "madeira",
-        tipo: /circula|corredor|hall/i.test(r.name) ? "circ" : null,
+        tipo: SACADAS.test(r.name) ? "sacada" : /circula|corredor|hall/i.test(r.name) ? "circ" : null,
         items: [],
       };
       placed.push({ room, x: cursorX + r.width / 2, z: cursorZ + r.length / 2 });
@@ -47,18 +71,51 @@ export function roomsToPlan(rooms: Room[]): PlanRoom[] {
       rowD = Math.max(rowD, r.length);
     });
 
-    // Every floor is centred on the same origin, so the upper storey sits ON the ground
-    // floor instead of drifting off to the side of it.
+    // Cada andar centrado no mesmo ponto, para empilharem alinhados.
     const minX = Math.min(...placed.map((p) => p.x - p.room.w / 2));
     const maxX = Math.max(...placed.map((p) => p.x + p.room.w / 2));
     const minZ = Math.min(...placed.map((p) => p.z - p.room.d / 2));
     const maxZ = Math.max(...placed.map((p) => p.z + p.room.d / 2));
-    const ox = (minX + maxX) / 2;
-    const oz = (minZ + maxZ) / 2;
+    const ox = (minX + maxX) / 2, oz = (minZ + maxZ) / 2;
+    // O térreo define a pegada; os andares acima não podem passar dela.
+    if (ordem === 0) limite = Math.max(...onFloor.map(({ r }) => r.width), maxX - minX);
     placed.forEach(({ room, x, z }) => {
       room.cx = Number((x - ox).toFixed(2));
       room.cz = Number((z - oz).toFixed(2));
       out.push(room);
+    });
+    bbox = {
+      x0: Math.min(bbox.x0, minX - ox), x1: Math.max(bbox.x1, maxX - ox),
+      z0: Math.min(bbox.z0, minZ - oz), z1: Math.max(bbox.z1, maxZ - oz),
+    };
+  });
+
+  // Áreas externas ficam EM VOLTA da casa, nunca dentro do bloco construído: alternando
+  // frente, fundo, esquerda e direita, encostadas na fachada correspondente.
+  const lados: ("frente" | "fundo" | "esq" | "dir")[] = ["frente", "fundo", "esq", "dir"];
+  const usado = { frente: 0, fundo: 0, esq: 0, dir: 0 };
+  fora.forEach(({ r, i }, n) => {
+    const cfg = externoDe(r.name)!;
+    const lado = lados[n % lados.length];
+    let cx = 0, cz = 0;
+    if (lado === "frente") { cz = bbox.z1 + r.length / 2 + usado.frente; usado.frente += r.length; }
+    else if (lado === "fundo") { cz = bbox.z0 - r.length / 2 - usado.fundo; usado.fundo += r.length; }
+    else if (lado === "esq") { cx = bbox.x0 - r.width / 2 - usado.esq; usado.esq += r.width; }
+    else { cx = bbox.x1 + r.width / 2 + usado.dir; usado.dir += r.width; }
+    out.push({
+      id: r.name.toLowerCase().replace(/\s+/g, "_") + "_" + i,
+      nome: r.name,
+      f: 0,
+      w: r.width,
+      d: r.length,
+      cx: Number(cx.toFixed(2)),
+      cz: Number(cz.toFixed(2)),
+      piso: cfg.piso,
+      tipo: null,
+      ext: 1,
+      // As peças entram lado a lado, dentro dos limites da área.
+      items: cfg.itens.slice(0, r.width > 3 ? 2 : 1).map((kind, k, arr) =>
+        [kind, Number((((k + 0.5) / arr.length - 0.5) * r.width * 0.6).toFixed(2)), 0, 0] as [string, number, number, number]),
     });
   });
 
@@ -83,10 +140,13 @@ export function planToRooms(plan: PlanRoom[]): Room[] {
     }));
 }
 
-// Bumped whenever the migration itself changes. Version 1 laid the rooms out with gaps
-// between them, which rendered as a scatter of loose boxes rather than one house; a plan
-// saved by that version is rebuilt from `rooms` instead of being trusted.
-export const PLAN_VERSION = 2;
+// Bumped whenever the migration itself changes; a plan saved by an older version is
+// rebuilt from `rooms` instead of being trusted.
+//   1 · rooms laid out with gaps — rendered as a scatter of loose boxes
+//   2 · rooms packed edge to edge, floors centred
+//   3 · pool/grill/garage/yard become outdoor areas around the house, and upper floors
+//       are kept within the ground floor's footprint
+export const PLAN_VERSION = 3;
 
 export function build3DHtml(project: Project): string {
   // An empty plan makes the scene load its own sample house, so old projects are
