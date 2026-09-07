@@ -37,6 +37,7 @@ export type Project = {
   cep?: string;
   floors?: number;
   plan?: PlanRoom[];
+  plan_version?: number;
 };
 export type Offer = {
   id: string;

@@ -10,25 +10,59 @@ export function roomsToPlan(rooms: Room[]): PlanRoom[] {
   const PISO: Record<string, PlanRoom["piso"]> = {
     cozinha: "frio", banheiro: "frio", lavabo: "frio", area: "frio",
   };
-  let cursorX = 0, cursorZ = 0, rowD = 0;
-  return rooms.map((r, i) => {
-    const w = r.width, d = r.length;
-    if (cursorX + w > 12) { cursorX = 0; cursorZ += rowD + 0.3; rowD = 0; }
-    const room: PlanRoom = {
-      id: r.name.toLowerCase().replace(/\s+/g, "_") + "_" + i,
-      nome: r.name,
-      f: r.floor || 0,
-      w, d,
-      cx: cursorX + w / 2 - 5.5,
-      cz: cursorZ + d / 2 - 4.2,
-      piso: PISO[r.name.toLowerCase()] || "madeira",
-      tipo: /circula|corredor|hall/i.test(r.name) ? "circ" : null,
-      items: [],
-    };
-    cursorX += w + 0.3;
-    rowD = Math.max(rowD, d);
-    return room;
+  const floors = [...new Set(rooms.map((r) => r.floor || 0))].sort((a, b) => a - b);
+  const out: PlanRoom[] = [];
+
+  floors.forEach((f) => {
+    const onFloor = rooms.map((r, i) => ({ r, i })).filter(({ r }) => (r.floor || 0) === f);
+    if (!onFloor.length) return;
+
+    // Rows are packed edge to edge, with NO gap: the rooms of a house share walls. The
+    // old layout left 0.3 m between them, which is why the maquette came out as a
+    // scatter of loose boxes instead of one building.
+    const area = onFloor.reduce((a, { r }) => a + r.width * r.length, 0);
+    // A row a bit wider than the square root of the total area keeps the block roughly
+    // square. Sized too tightly, one big room fills a row on its own and the house comes
+    // out as a long narrow strip.
+    const rowMax = Math.max(...onFloor.map(({ r }) => r.width), Math.sqrt(area * 1.6));
+
+    const placed: { room: PlanRoom; x: number; z: number }[] = [];
+    let cursorX = 0, cursorZ = 0, rowD = 0;
+    onFloor.forEach(({ r, i }) => {
+      if (cursorX > 0 && cursorX + r.width > rowMax) { cursorX = 0; cursorZ += rowD; rowD = 0; }
+      const room: PlanRoom = {
+        id: r.name.toLowerCase().replace(/\s+/g, "_") + "_" + i,
+        nome: r.name,
+        f,
+        w: r.width,
+        d: r.length,
+        cx: 0,
+        cz: 0,
+        piso: PISO[r.name.toLowerCase()] || "madeira",
+        tipo: /circula|corredor|hall/i.test(r.name) ? "circ" : null,
+        items: [],
+      };
+      placed.push({ room, x: cursorX + r.width / 2, z: cursorZ + r.length / 2 });
+      cursorX += r.width;
+      rowD = Math.max(rowD, r.length);
+    });
+
+    // Every floor is centred on the same origin, so the upper storey sits ON the ground
+    // floor instead of drifting off to the side of it.
+    const minX = Math.min(...placed.map((p) => p.x - p.room.w / 2));
+    const maxX = Math.max(...placed.map((p) => p.x + p.room.w / 2));
+    const minZ = Math.min(...placed.map((p) => p.z - p.room.d / 2));
+    const maxZ = Math.max(...placed.map((p) => p.z + p.room.d / 2));
+    const ox = (minX + maxX) / 2;
+    const oz = (minZ + maxZ) / 2;
+    placed.forEach(({ room, x, z }) => {
+      room.cx = Number((x - ox).toFixed(2));
+      room.cz = Number((z - oz).toFixed(2));
+      out.push(room);
+    });
   });
+
+  return out;
 }
 
 // The 3D editor owns the `plan`, but the estimate, the material list and the PDF are all
@@ -49,12 +83,16 @@ export function planToRooms(plan: PlanRoom[]): Room[] {
     }));
 }
 
+// Bumped whenever the migration itself changes. Version 1 laid the rooms out with gaps
+// between them, which rendered as a scatter of loose boxes rather than one house; a plan
+// saved by that version is rebuilt from `rooms` instead of being trusted.
+export const PLAN_VERSION = 2;
+
 export function build3DHtml(project: Project): string {
   // An empty plan makes the scene load its own sample house, so old projects are
   // migrated here rather than showing someone else's floor plan.
-  const planRooms = project.plan && project.plan.length
-    ? project.plan
-    : roomsToPlan(project.rooms || []);
+  const usable = project.plan && project.plan.length && project.plan_version === PLAN_VERSION;
+  const planRooms = usable ? (project.plan as PlanRoom[]) : roomsToPlan(project.rooms || []);
   const plan = JSON.stringify(planRooms);
   const floors = project.floors || planRooms.reduce((n, r) => Math.max(n, (r.f || 0) + 1), 1);
 

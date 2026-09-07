@@ -96,6 +96,9 @@ class ProjectInput(BaseModel):
     # their furniture. Stored as-is; the PUT writes the whole document.
     floors: int = 2
     plan: list = []
+    # Which version of the layout migration produced `plan`. An older one is rebuilt from
+    # `rooms` when the 3D screen opens.
+    plan_version: int = 0
 
 
 class CartItem(BaseModel):

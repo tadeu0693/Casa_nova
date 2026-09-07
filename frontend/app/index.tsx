@@ -16,7 +16,7 @@ import { Templates } from "@/src/components/Templates";
 import { Alerts } from "@/src/components/Alerts";
 import { Projects } from "@/src/components/Projects";
 import { View3D } from "@/src/components/View3D";
-import { planToRooms } from "@/src/utils/build3d";
+import { PLAN_VERSION, planToRooms } from "@/src/utils/build3d";
 import { CepModal } from "@/src/components/CepModal";
 import { Onboarding } from "@/src/components/Onboarding";
 import type { CepData, Offer, Project, User } from "@/src/types";
@@ -89,7 +89,7 @@ export default function Index() {
     if (!project) return;
     // Keep `rooms` in step so the estimate, the material list and the PDF reflect what
     // the person actually built in 3D.
-    const updated = { ...project, plan, floors, rooms: planToRooms(plan) };
+    const updated = { ...project, plan, floors, plan_version: PLAN_VERSION, rooms: planToRooms(plan) };
     if (project.project_id) {
       try {
         const saved = await request(`/projects/${project.project_id}`, {
