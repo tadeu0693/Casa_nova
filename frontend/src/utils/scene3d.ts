@@ -616,7 +616,7 @@ function updateRoomMeta() {
 function setEditing(on) {
   editing = on;
   $('sheet').classList.toggle('open', on);
-  $('btnEdit').textContent = on ? 'Concluir' : 'Editar';
+  $('btnEdit').textContent = on ? 'Concluir' : 'Mobiliar';
   $('btnEdit').classList.toggle('done', on);
   $('roomcard').classList.toggle('slim', on);
   if (!on) select(null);

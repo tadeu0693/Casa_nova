@@ -250,14 +250,20 @@ export function build3DHtml(project: Project): string {
   #roomcard.show{display:flex;flex-wrap:wrap}
   #roomcard .rcsize{flex:1 0 100%;display:flex;align-items:center;gap:6px;margin-top:8px;
     padding-top:8px;border-top:1px solid rgba(255,255,255,.14)}
+  /* Mobiliando, o cartão fica só com Concluir e Sair. */
+  #roomcard.slim .rcsize,
+  #roomcard.slim #rcmove,
+  #roomcard.slim #rcdel{display:none}
+  #roomcard.slim{padding:8px 10px}
   #roomcard .rcsize span{font-size:11px;color:#B9B6B0;margin-left:4px}
   #roomcard .rcsize button{height:34px;width:38px;padding:0;font-size:17px;line-height:1}
   #roomcard.slim{bottom:auto;top:56px;left:12px;right:12px}
-  #roomcard .t{flex:1;min-width:52px}
+  #roomcard .t{flex:1 1 100%;min-width:0;margin-bottom:6px}
+  #roomcard.slim .t{flex:1 1 auto;margin-bottom:0}
   #roomcard #rcdel{background:rgba(200,90,50,.55)}
   #roomcard b{display:block;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #roomcard span{display:block;font-size:11px;color:#B9B6B0;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #roomcard button{border:none;background:rgba(255,255,255,.15);color:#fff;border-radius:12px;height:44px;padding:0 11px;flex:0 0 auto;
+  #roomcard button{border:none;background:rgba(255,255,255,.15);color:#fff;border-radius:12px;height:42px;padding:0 12px;flex:0 0 auto;font-size:13px;
     font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap}
   #btnEdit.done{background:var(--brand)}
 
@@ -265,6 +271,9 @@ export function build3DHtml(project: Project): string {
     box-shadow:0 -8px 28px rgba(0,0,0,.14);transform:translateY(103%);transition:transform .26s ease;
     max-height:46%;display:flex;flex-direction:column}
   #sheet.open{transform:translateY(0)}
+  /* Com uma peça selecionada a lista sai da frente, deixando a maquete à mostra. */
+  body.picked #sheet.open{transform:translateY(calc(100% - 52px))}
+  body.picked #selbar{bottom:62px}
   #sheet .hd{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px}
   #sheet .hd b{font-size:15px}
   #sheet.swap .hd b{color:var(--brand)}
@@ -281,6 +290,7 @@ export function build3DHtml(project: Project): string {
   #selbar{position:absolute;left:12px;right:12px;bottom:calc(46% + 10px);display:none;flex-direction:column;gap:7px;z-index:7;
     background:rgba(26,26,26,.93);color:#fff;border-radius:16px;padding:9px 10px;backdrop-filter:blur(14px)}
   #selbar.show{display:flex}
+  #sheet .hd{cursor:pointer}
   #selbar .nm{font-size:12.5px;font-weight:600;padding:0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #selbar .row{display:flex;gap:6px}
   #selbar button{flex:1;min-width:0;height:44px;border:none;border-radius:12px;background:rgba(255,255,255,.14);color:#fff;
@@ -455,6 +465,23 @@ export function build3DHtml(project: Project): string {
       applyView();
       toast("Arraste o cômodo para movê-lo");
     };
+    // A gaveta de peças recolhe sozinha quando uma peça é selecionada e volta quando a
+    // seleção é limpa — sem isso, três painéis empilhados tapavam a maquete inteira.
+    const selbar = document.getElementById("selbar");
+    if (selbar && window.MutationObserver) {
+      const sync = function () {
+        document.body.classList.toggle("picked", selbar.classList.contains("show"));
+      };
+      new MutationObserver(sync).observe(selbar, { attributes: true, attributeFilter: ["class"] });
+      sync();
+    }
+    // Tocar no cabeçalho da gaveta abre e fecha a lista.
+    const hd = document.querySelector("#sheet .hd");
+    if (hd) hd.addEventListener("click", function (e) {
+      if (e.target && e.target.id === "sclose") return;
+      document.body.classList.toggle("picked");
+    });
+
     // Redimensionar de dentro do cômodo, sem precisar achar o modo Planta.
     const passo = { rcwm: [-0.25, 0], rcwp: [0.25, 0], rcdm: [0, -0.25], rcdp: [0, 0.25] };
     Object.keys(passo).forEach(function (id) {
