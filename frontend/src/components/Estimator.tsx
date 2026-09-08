@@ -15,6 +15,9 @@ type EstimateData = {
   materials: { name: string; quantity: number; unit: string; category: string; room: string; search: string }[];
   per_room: PerRoom[];
   estimated_total: number;
+  materials_total?: number;
+  wall_area?: number;
+  cost_per_m2?: number;
   note: string;
 };
 
@@ -88,8 +91,27 @@ export function Estimator({
         <Text style={styles.totalValue}>
           R$ {(data?.estimated_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
         </Text>
-        <Text style={styles.totalNote}>Valores variam por região e acabamento</Text>
+        <Text style={styles.totalNote}>
+          {data?.cost_per_m2 ? `R$ ${data.cost_per_m2.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}/m² · ` : ""}
+          inclui mão de obra
+        </Text>
+        {/* Dois números bem diferentes apareciam sem explicação: o total da obra (CUB,
+            com mão de obra) e a soma da lista de compras. Mostrar os dois lado a lado
+            evita a impressão de que um deles está errado. */}
+        <View style={styles.breakdown}>
+          <View style={styles.breakItem}>
+            <Text style={styles.breakLabel}>Materiais da lista</Text>
+            <Text style={styles.breakValue}>
+              R$ {(data?.materials_total || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}
+            </Text>
+          </View>
+          <View style={styles.breakItem}>
+            <Text style={styles.breakLabel}>Área de parede</Text>
+            <Text style={styles.breakValue}>{data?.wall_area || 0} m²</Text>
+          </View>
+        </View>
       </View>
+      {data?.note ? <Text style={styles.noteBox}>{data.note}</Text> : null}
 
       <View style={styles.segment}>
         <Pressable
@@ -186,6 +208,11 @@ function buildStyles(colors: typeof lightColors) {
   total: { backgroundColor: colors.ink, borderRadius: 17, padding: 21, marginBottom: 20 },
   totalLabel: { color: colors.dim, fontSize: 11, fontWeight: "700", letterSpacing: 1.1 },
   totalValue: { color: "#fff", fontSize: 29, fontWeight: "700", marginTop: 8 },
+  breakdown: { flexDirection: "row", gap: 10, marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,.16)" },
+  breakItem: { flex: 1 },
+  breakLabel: { color: colors.dim, fontSize: 10.5, fontWeight: "700" },
+  breakValue: { color: "#fff", fontSize: 15, fontWeight: "700", marginTop: 3 },
+  noteBox: { color: colors.muted, fontSize: 11.5, lineHeight: 17, marginTop: -8, marginBottom: 18 },
   totalNote: { color: colors.dim, fontSize: 12, marginTop: 7 },
   segment: { flexDirection: "row", backgroundColor: colors.card, borderRadius: 12, padding: 4, marginBottom: 14 },
   segBtn: { flex: 1, paddingVertical: 10, alignItems: "center", borderRadius: 9 },

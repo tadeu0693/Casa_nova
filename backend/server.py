@@ -550,94 +550,163 @@ def _build_project_pdf(project: Dict[str, Any], rooms: List[Room], est: Dict[str
     return bytes(output)
 
 
+WALL_H = 2.7          # pé-direito, m
+CUB_BASE = 1900.0     # R$/m², padrão médio residencial
+
+
+def _wall_area(rooms: List[Room]) -> float:
+    """Área de parede em m², a partir da geometria real dos cômodos.
+
+    As arestas são agrupadas por linha (mesmo andar, mesma orientação, mesma coordenada)
+    e a UNIÃO dos intervalos é medida. Assim a divisa entre dois cômodos vira uma parede
+    só, mesmo quando eles se encostam apenas em parte — comparar as arestas inteiras não
+    bastava, porque um cômodo estreito ao lado de um largo gera trechos diferentes e a
+    divisa acabava contada duas vezes.
+
+    O cálculo antigo era pior ainda: um coeficiente por m² de piso, cego ao formato da
+    casa. Uma planta quadrada e uma comprida de mesma área gastam alvenarias bem
+    diferentes.
+    """
+    linhas: Dict[tuple, List[tuple]] = {}
+
+    def add(key: tuple, a: float, b: float) -> None:
+        linhas.setdefault(key, []).append((round(min(a, b), 3), round(max(a, b), 3)))
+
+    for r in rooms:
+        x, y, w, d, f = r.x, r.y, r.width, r.length, r.floor
+        add((f, "h", round(y, 2)), x, x + w)
+        add((f, "h", round(y + d, 2)), x, x + w)
+        add((f, "v", round(x, 2)), y, y + d)
+        add((f, "v", round(x + w, 2)), y, y + d)
+
+    total = 0.0
+    for trechos in linhas.values():
+        trechos.sort()
+        ini, fim = trechos[0]
+        for a, b in trechos[1:]:
+            if a > fim + 0.01:          # buraco: começa um trecho novo
+                total += fim - ini
+                ini, fim = a, b
+            else:                       # encosta ou sobrepõe: estende o mesmo trecho
+                fim = max(fim, b)
+        total += fim - ini
+    return round(total * WALL_H, 2)
+
+
+def _room_multiplier(name: str) -> float:
+    """Quanto o m² daquele tipo de ambiente custa em relação ao padrão.
+
+    Mais alto = mais caro por m² (hidráulica, revestimento cerâmico, impermeabilização).
+    A ordem importa: o mais específico vem primeiro.
+    """
+    n = name.lower().strip()
+    if "piscina" in n:
+        return 2.0
+    if "banh" in n or "lavab" in n or "wc" in n:
+        return 1.35
+    if "cozin" in n or "gourmet" in n or "churrasq" in n:
+        return 1.30
+    if "serviço" in n or "servico" in n or "lavand" in n:
+        return 1.15
+    if "suíte" in n or "suite" in n:
+        return 1.15
+    if "escada" in n:
+        return 1.10
+    if "closet" in n:
+        return 1.05
+    if "conceito" in n or "integr" in n or "aberto" in n or "living" in n:
+        return 0.95
+    if "sacada" in n or "varand" in n or "terra" in n:
+        return 0.70
+    if "garag" in n or "vaga" in n:
+        return 0.65
+    if "corredor" in n or "hall" in n or "circula" in n:
+        return 0.55
+    if "jardim" in n or "quintal" in n or "extern" in n:
+        return 0.50
+    return 1.0
+
+
 def _compute_estimate(rooms: List[Room], width: float, length: float) -> Dict[str, Any]:
     rooms = rooms or [Room(name="Ambiente principal", width=width, length=length)]
-    # IMPORTANT: use the BUILT area (sum of each room) for materials/cost, not the lot
-    # size (width × length). The lot can be much bigger than what's actually being built
-    # (e.g. a 30×30m lot with a modest house on it) — using lot size there would wildly
-    # overestimate every material quantity and the total project cost.
+    # Área CONSTRUÍDA (soma dos cômodos), não a do terreno: um lote de 30×30 m com uma
+    # casa modesta em cima multiplicaria todo material se usássemos o terreno.
     area = round(sum(r.width * r.length for r in rooms), 2) or (width * length)
+    wall_area = _wall_area(rooms) or round(area * 1.8, 2)
+
+    # --- Volumes de argamassa e concreto, de onde saem cimento, areia e brita ---
+    # Assentamento 0,012 m³/m² de parede + reboco nas duas faces (2 × 0,02 m).
+    arg_m3 = wall_area * 0.052
+    # Contrapiso de 5 cm (0,05 m³/m²) + baldrame/fundação simples (0,025 m³/m²).
+    conc_m3 = area * 0.075
+    # Traços usuais: argamassa ~5 sacos de cimento e 1,1 m³ de areia por m³;
+    # concreto ~7 sacos, 0,55 m³ de areia e 0,60 m³ de brita por m³.
+    cimento = arg_m3 * 5.0 + conc_m3 * 7.0
+    areia = arg_m3 * 1.1 + conc_m3 * 0.55
+    brita = conc_m3 * 0.60
+
     materials = [
-        {"name": "Cimento 50kg", "quantity": max(1, round(area * 0.35)), "unit": "sacos", "category": "Estrutura", "room": "Todos", "search": "cimento saco 50kg", "unit_cost": 42.0},
-        {"name": "Areia média", "quantity": round(area * 0.045, 1), "unit": "m³", "category": "Estrutura", "room": "Todos", "search": "areia média construção", "unit_cost": 130.0},
-        {"name": "Bloco cerâmico", "quantity": round(area * 16), "unit": "un", "category": "Alvenaria", "room": "Todos", "search": "bloco cerâmico 9x19x19", "unit_cost": 2.5},
-        {"name": "Piso/ revestimento", "quantity": round(area * 1.1, 1), "unit": "m²", "category": "Acabamento", "room": "Todos", "search": "piso porcelanato 60x60", "unit_cost": 65.0},
-        {"name": "Tinta acrílica", "quantity": max(1, round(area * 0.12)), "unit": "galões", "category": "Acabamento", "room": "Todos", "search": "tinta acrílica 3,6L", "unit_cost": 155.0},
+        {"name": "Cimento 50kg", "quantity": max(1, round(cimento)), "unit": "sacos",
+         "category": "Estrutura", "room": "Todos", "search": "cimento saco 50kg", "unit_cost": 42.0},
+        {"name": "Areia média", "quantity": round(areia, 1), "unit": "m³",
+         "category": "Estrutura", "room": "Todos", "search": "areia média construção", "unit_cost": 130.0},
+        {"name": "Brita 1", "quantity": round(brita, 1), "unit": "m³",
+         "category": "Estrutura", "room": "Todos", "search": "brita 1 construção", "unit_cost": 145.0},
+        {"name": "Aço CA-50 8mm", "quantity": max(1, round(area * 4.2)), "unit": "kg",
+         "category": "Estrutura", "room": "Todos", "search": "vergalhão aço ca-50 8mm", "unit_cost": 8.5},
+        # Bloco 9×19×39 assentado em pé: 12,5 un/m² de parede, mais 5% de perdas.
+        {"name": "Bloco cerâmico 9x19x39", "quantity": round(wall_area * 12.5 * 1.05),
+         "unit": "un", "category": "Alvenaria", "room": "Todos",
+         "search": "bloco cerâmico 9x19x39", "unit_cost": 2.5},
+        # Piso com 10% de perda de recorte.
+        {"name": "Piso / revestimento", "quantity": round(area * 1.1, 1), "unit": "m²",
+         "category": "Acabamento", "room": "Todos", "search": "piso porcelanato 60x60", "unit_cost": 65.0},
+        # Telhado ~1,25 m² de telha por m² de piso do último pavimento (inclinação + beiral).
+        {"name": "Telha cerâmica", "quantity": round(area * 1.25 * 16), "unit": "un",
+         "category": "Cobertura", "room": "Todos", "search": "telha cerâmica portuguesa", "unit_cost": 3.2},
+        # Duas demãos nas duas faces das paredes e no teto; galão de 3,6 L rende ~45 m²/demão.
+        {"name": "Tinta acrílica 3,6L", "quantity": max(1, round((wall_area * 2 + area) * 2 / 45)),
+         "unit": "galões", "category": "Acabamento", "room": "Todos",
+         "search": "tinta acrílica 3,6L", "unit_cost": 155.0},
     ]
-    # CUB (Custo Unitário Básico) médio nacional, padrão médio residencial, ~2026: a
-    # faixa real fica entre R$1.800/m² (padrão baixo) e R$4.500/m² (alto padrão),
-    # publicada mensalmente pelos Sinduscons estaduais. Usamos R$1.900/m² como base
-    # de padrão médio — ainda assim é uma REFERÊNCIA, não um orçamento fechado (não
-    # inclui terreno, projeto, taxas, mão de obra especializada fora da média, etc.,
-    # igual o próprio CUB oficial também não inclui).
-    total = round(area * 1900.0, 2)
-    # Per-room cost: proportional to area × room-type multiplier.
-    # Higher = mais caro por m² (hidráulica, revestimento cerâmico, impermeabilização).
-    # Ordem importa (mais específico primeiro).
-    def room_multiplier(name: str) -> float:
-        n = name.lower().strip()
-        # Piscina: impermeabilização + azulejo + bomba
-        if "piscina" in n:
-            return 2.0
-        # Banheiro / Lavabo: muito revestimento + hidráulica
-        if "banh" in n or "lavab" in n or "wc" in n:
-            return 1.35
-        # Cozinha / Área gourmet / Churrasqueira: hidráulica, exaustão, coifa
-        if "cozin" in n or "gourmet" in n or "churrasq" in n:
-            return 1.30
-        # Área de serviço / Lavanderia
-        if "serviço" in n or "servico" in n or "lavand" in n:
-            return 1.15
-        # Suíte: quarto + banheirinho pequeno (menos que banheiro puro)
-        if "suíte" in n or "suite" in n:
-            return 1.15
-        # Escada
-        if "escada" in n:
-            return 1.10
-        # Closet
-        if "closet" in n:
-            return 1.05
-        # Conceito aberto / integrado: economia estrutural (sem paredes)
-        if "conceito" in n or "integr" in n or "aberto" in n or "living" in n:
-            return 0.95
-        # Sacada / Varanda / Terraço
-        if "sacada" in n or "varand" in n or "terra" in n:
-            return 0.70
-        # Corredor / Hall
-        if "corredor" in n or "hall" in n or "circula" in n:
-            return 0.55
-        # Garagem / Vaga
-        if "garag" in n or "vaga" in n:
-            return 0.65
-        # Jardim / Quintal / Externo
-        if "jardim" in n or "quintal" in n or "extern" in n:
-            return 0.50
-        # Quarto / Sala / demais: base
-        return 1.0
-    # Normalize so weighted sum = total.
-    weighted = [
-        (r, r.width * r.length * room_multiplier(r.name))
-        for r in rooms
-    ]
-    weighted_total = sum(w for _, w in weighted) or 1
+    materials_total = round(sum(m["quantity"] * m["unit_cost"] for m in materials), 2)
+
+    # --- Custo por cômodo e total ---
+    # O total agora SOMA os cômodos já com o multiplicador de cada um. Antes ele era
+    # sempre área × CUB, e o multiplicador só redistribuía essa mesma quantia: uma casa
+    # só de banheiros custava exatamente o mesmo que uma só de corredores.
     per_room = []
-    for r, w in weighted:
-        room_cost = round(total * (w / weighted_total), 2)
+    total = 0.0
+    for r in rooms:
         room_area = round(r.width * r.length, 2)
+        mult = _room_multiplier(r.name)
+        room_cost = round(room_area * CUB_BASE * mult, 2)
+        total += room_cost
         per_room.append({
             "name": r.name,
             "area": room_area,
             "cost": room_cost,
-            "cost_per_m2": round(room_cost / room_area, 2) if room_area else 0,
-            "share": round((w / weighted_total) * 100, 1),
+            "cost_per_m2": round(CUB_BASE * mult, 2),
+            "multiplier": mult,
         })
+    total = round(total, 2)
+    for pr in per_room:
+        pr["share"] = round((pr["cost"] / total) * 100, 1) if total else 0.0
+
     return {
         "area": round(area, 1),
+        "wall_area": wall_area,
         "rooms": [r.model_dump() for r in rooms],
         "materials": materials,
+        "materials_total": materials_total,
         "estimated_total": total,
+        "cost_per_m2": round(total / area, 2) if area else 0,
         "per_room": per_room,
-        "note": "Estimativa inicial. Confirme o projeto com um profissional responsável.",
+        "note": (
+            "Estimativa inicial. O total usa o CUB de padrão médio (R$ "
+            f"{CUB_BASE:,.0f}/m²), que JÁ INCLUI mão de obra — por isso é bem maior que "
+            "a soma da lista de materiais. Confirme com um profissional responsável."
+        ).replace(",", "."),
     }
 
 
