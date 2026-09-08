@@ -158,7 +158,7 @@ const PIECES = {
     for (const sz of [-1, 1]) for (const sx of [-0.42, 0.42]) {
       const c = new THREE.Group(); c.name = 'cadeira';
       c.add(box(0.44, 0.05, 0.44, M.madClara, 0, 0.45, 0, 'assento'));
-      c.add(box(0.44, 0.48, 0.05, M.madClara, 0, 0.7, -0.2 * sz, 'encosto'));
+      c.add(box(0.44, 0.48, 0.05, M.madClara, 0, 0.7, 0.2 * sz, 'encosto'));
       legs(c, 0.44, 0.44, 0.45, M.escuro, 0.05, 0.018);
       c.position.set(sx, 0, sz * 0.78);
       g.add(c);
@@ -275,7 +275,7 @@ const PIECES = {
       const a = (i / 4) * Math.PI * 2, r = 1.05;
       const c = new THREE.Group();
       c.add(box(0.44, 0.05, 0.44, M.deck, 0, 0.44, 0, 'assento'));
-      c.add(box(0.44, 0.46, 0.05, M.deck, 0, 0.68, -0.2, 'encosto'));
+      c.add(box(0.44, 0.46, 0.05, M.deck, 0, 0.68, 0.2, 'encosto'));
       for (const sx of [-1, 1]) for (const sz of [-1, 1])
         c.add(cyl(0.018, 0.44, M.metal, sx * 0.17, 0.22, sz * 0.17, 'pe', 8));
       c.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
@@ -391,7 +391,7 @@ const PIECES = {
     for (const sz of [-1, 1]) for (const sx of [-1.05, -0.35, 0.35, 1.05]) {
       const c = new THREE.Group(); c.name = 'cadeira';
       c.add(box(0.44, 0.05, 0.44, M.tecido, 0, 0.46, 0, 'assento'));
-      c.add(box(0.44, 0.6, 0.06, M.madeira, 0, 0.78, -0.2 * sz, 'encosto'));
+      c.add(box(0.44, 0.6, 0.06, M.madeira, 0, 0.78, 0.2 * sz, 'encosto'));
       for (const ax of [-1, 1]) for (const az of [-1, 1])
         c.add(cyl(0.02, 0.46, M.madeira, ax * 0.17, 0.23, az * 0.17, 'pe', 8));
       c.position.set(sx, 0, sz * 0.92);
@@ -454,6 +454,91 @@ const PIECES = {
       const c = cyl(0.02, 0.42, M.lona, sx * (w / 2 - 0.28), 1.44, 0, 'corda', 8);
       c.rotation.z = Math.PI / 2 - sx * 0.5;
       g.add(c);
+    }
+    return { g, w, d };
+  },
+  fogao() {
+    const g = new THREE.Group(), w = 0.76, d = 0.65;
+    g.add(box(w, 0.88, d, M.branco, 0, 0.44, 0, 'corpo'));
+    g.add(box(w - 0.04, 0.03, d - 0.04, M.escuro, 0, 0.9, 0, 'mesa'));
+    for (const sx of [-1, 1]) for (const sz of [-1, 1])
+      g.add(cyl(0.09, 0.02, M.metal, sx * 0.17, 0.92, sz * 0.15, 'boca', 14));
+    g.add(box(w - 0.08, 0.4, 0.03, M.vidro, 0, 0.5, d / 2, 'visor'));
+    g.add(cyl(0.02, w - 0.14, M.metal, 0, 0.74, d / 2 + 0.04, 'puxador', 10));
+    g.children[g.children.length - 1].rotation.z = Math.PI / 2;
+    return { g, w, d };
+  },
+  coifa() {
+    const g = new THREE.Group(), w = 0.9, d = 0.5;
+    g.add(box(w, 0.12, d, M.metal, 0, 1.62, 0, 'captor'));
+    g.add(box(w - 0.3, 0.5, d - 0.2, M.metal, 0, 1.93, 0, 'duto'));
+    g.add(box(w - 0.06, 0.02, d - 0.06, M.escuro, 0, 1.55, 0, 'filtro'));
+    return { g, w, d };
+  },
+  microondas() {
+    const g = new THREE.Group(), w = 0.52, d = 0.38;
+    g.add(box(w, 0.3, d, M.escuro, 0, 0.15, 0, 'corpo'));
+    g.add(box(w * 0.62, 0.2, 0.02, M.vidro, -0.06, 0.16, d / 2, 'porta'));
+    return { g, w, d };
+  },
+  camaSolteiro() {
+    const g = new THREE.Group(), w = 0.98, d = 1.92;
+    g.add(box(w, 0.26, d, M.madeira, 0, 0.16, 0, 'estrado'));
+    g.add(box(w - 0.06, 0.2, d - 0.06, M.branco, 0, 0.39, 0, 'colchao'));
+    g.add(box(w, 0.5, 0.06, M.madeira, 0, 0.5, -d / 2, 'cabeceira'));
+    g.add(box(w - 0.24, 0.1, 0.34, M.branco, 0, 0.53, -d / 2 + 0.3, 'travesseiro'));
+    g.add(box(w - 0.04, 0.05, d * 0.4, M.almofada, 0, 0.5, d * 0.22, 'manta'));
+    return { g, w, d };
+  },
+  comoda() {
+    const g = new THREE.Group(), w = 1.1, d = 0.45;
+    g.add(box(w, 0.82, d, M.madClara, 0, 0.41, 0, 'corpo'));
+    for (let i = 0; i < 3; i++) g.add(cyl(0.02, w * 0.5, M.metal, 0, 0.2 + i * 0.24, d / 2 + 0.02, 'puxador', 8));
+    for (const o of g.children) if (o.name === 'puxador') o.rotation.z = Math.PI / 2;
+    return { g, w, d };
+  },
+  aparador() {
+    const g = new THREE.Group(), w = 1.5, d = 0.38;
+    g.add(box(w, 0.06, d, M.madeira, 0, 0.78, 0, 'tampo'));
+    g.add(box(w - 0.1, 0.42, d - 0.04, M.branco, 0, 0.54, 0, 'gaveteiro'));
+    legs(g, w, d, 0.33, M.escuro, 0.1, 0.02);
+    return { g, w, d };
+  },
+  luminariaPiso() {
+    const g = new THREE.Group(), w = 0.4, d = 0.4;
+    g.add(cyl(0.18, 0.03, M.escuro, 0, 0.015, 0, 'base', 18));
+    g.add(cyl(0.02, 1.5, M.metal, 0, 0.76, 0, 'haste', 10));
+    g.add(cyl(0.2, 0.28, M.lona, 0, 1.62, 0, 'cupula', 18));
+    return { g, w, d };
+  },
+  duchaExterna() {
+    const g = new THREE.Group(), w = 0.5, d = 0.5;
+    g.add(box(0.7, 0.05, 0.7, M.pedra, 0, 0.025, 0, 'base'));
+    g.add(cyl(0.045, 2.2, M.metal, 0, 1.1, -0.1, 'coluna', 12));
+    g.add(box(0.34, 0.05, 0.34, M.metal, 0, 2.18, 0.1, 'chuveiro'));
+    g.add(cyl(0.03, 0.24, M.metal, 0, 2.18, 0, 'braco', 10));
+    g.children[g.children.length - 1].rotation.x = Math.PI / 2;
+    return { g, w, d };
+  },
+  bancoJardim() {
+    const g = new THREE.Group(), w = 1.6, d = 0.6;
+    g.add(box(w, 0.06, 0.46, M.deck, 0, 0.44, 0.04, 'assento'));
+    g.add(box(w, 0.42, 0.06, M.deck, 0, 0.68, -0.24, 'encosto'));
+    for (const sx of [-1, 1]) {
+      g.add(box(0.08, 0.44, 0.08, M.escuro, sx * (w / 2 - 0.12), 0.22, 0.16, 'pe'));
+      g.add(box(0.08, 0.44, 0.08, M.escuro, sx * (w / 2 - 0.12), 0.22, -0.2, 'pe'));
+    }
+    return { g, w, d };
+  },
+  floreira() {
+    const g = new THREE.Group(), w = 1.2, d = 0.4;
+    g.add(box(w, 0.42, d, M.pedra, 0, 0.21, 0, 'caixa'));
+    for (let i = 0; i < 5; i++) {
+      const x = -w / 2 + 0.16 + i * ((w - 0.32) / 4);
+      const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.14 + (i % 2) * 0.04, 0), M.verde);
+      b.position.set(x, 0.54, (i % 2 ? 0.06 : -0.06));
+      b.castShadow = true; b.name = 'arbusto';
+      g.add(b);
     }
     return { g, w, d };
   },

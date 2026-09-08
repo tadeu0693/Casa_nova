@@ -247,7 +247,11 @@ export function build3DHtml(project: Project): string {
     padding:7px 11px;border-radius:999px;backdrop-filter:blur(8px)}
   #roomcard{position:absolute;left:12px;right:12px;bottom:12px;display:none;align-items:center;gap:8px;
     background:rgba(26,26,26,.93);color:#fff;border-radius:18px;padding:10px 10px;backdrop-filter:blur(14px);z-index:5}
-  #roomcard.show{display:flex}
+  #roomcard.show{display:flex;flex-wrap:wrap}
+  #roomcard .rcsize{flex:1 0 100%;display:flex;align-items:center;gap:6px;margin-top:8px;
+    padding-top:8px;border-top:1px solid rgba(255,255,255,.14)}
+  #roomcard .rcsize span{font-size:11px;color:#B9B6B0;margin-left:4px}
+  #roomcard .rcsize button{height:34px;width:38px;padding:0;font-size:17px;line-height:1}
   #roomcard.slim{bottom:auto;top:56px;left:12px;right:12px}
   #roomcard .t{flex:1;min-width:52px}
   #roomcard #rcdel{background:rgba(200,90,50,.55)}
@@ -357,6 +361,12 @@ export function build3DHtml(project: Project): string {
       <button id="rcmove">Mover</button>
       <button id="rcdel">Excluir</button>
       <button id="rcback">Sair</button>
+      <div class="rcsize">
+        <span>Largura</span>
+        <button id="rcwm">−</button><button id="rcwp">+</button>
+        <span>Fundo</span>
+        <button id="rcdm">−</button><button id="rcdp">+</button>
+      </div>
     </div>
     <div id="toast"></div>
     <div id="projpanel">
@@ -445,6 +455,17 @@ export function build3DHtml(project: Project): string {
       applyView();
       toast("Arraste o cômodo para movê-lo");
     };
+    // Redimensionar de dentro do cômodo, sem precisar achar o modo Planta.
+    const passo = { rcwm: [-0.25, 0], rcwp: [0.25, 0], rcdm: [0, -0.25], rcdp: [0, 0.25] };
+    Object.keys(passo).forEach(function (id) {
+      const b = document.getElementById(id);
+      if (!b) return;
+      b.onclick = function () {
+        if (!current) return;
+        resizeRoom(current, passo[id][0], passo[id][1]);
+        updateRoomMeta();
+      };
+    });
     if (del) del.onclick = function () {
       const r = current;
       if (!r) return;

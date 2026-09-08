@@ -268,11 +268,16 @@ function makeCeil(r) {
   // No último pavimento quem cobre é o telhado.
   if (r.f >= floors - 1) return;
   // Se há um cômodo logo acima, a laje dele já serve de teto para este.
-  const coberto = built().some(o =>
-    o.f === r.f + 1 && o.visible !== false &&
-    Math.min(o.cx + o.w / 2, r.cx + r.w / 2) - Math.max(o.cx - o.w / 2, r.cx - r.w / 2) > r.w - 0.06 &&
-    Math.min(o.cz + o.d / 2, r.cz + r.d / 2) - Math.max(o.cz - o.d / 2, r.cz - r.d / 2) > r.d - 0.06);
-  if (coberto) return;
+  // Soma a área coberta por TODOS os cômodos de cima: um sozinho raramente cobre este
+  // por inteiro, mas juntos costumam cobrir.
+  let area = 0;
+  for (const o of built()) {
+    if (o.f !== r.f + 1 || o.visible === false) continue;
+    const ox = Math.min(o.cx + o.w / 2, r.cx + r.w / 2) - Math.max(o.cx - o.w / 2, r.cx - r.w / 2);
+    const oz = Math.min(o.cz + o.d / 2, r.cz + r.d / 2) - Math.max(o.cz - o.d / 2, r.cz - r.d / 2);
+    if (ox > 0 && oz > 0) area += ox * oz;
+  }
+  if (area >= r.w * r.d - 0.05) return;
   const c = box(r.w, LAJE, r.d, M.parede, 0, WH + LAJE / 2, 0, 'lajeCobertura');
   c.receiveShadow = true;
   r.g.add(c);
@@ -695,14 +700,23 @@ const CATALOG = [
   { id: 'tapete', cat: 'Sala', label: 'Tapete', dim: '2,40 × 1,70 m' },
   { id: 'rackTV', cat: 'Sala', label: 'Rack + TV', dim: '1,80 × 0,42 m' },
   { id: 'planta', cat: 'Sala', label: 'Vaso com planta', dim: '0,50 m' },
+  { id: 'aparador', cat: 'Sala', label: 'Aparador', dim: '1,50 × 0,38 m' },
+  { id: 'luminariaPiso', cat: 'Sala', label: 'Luminária de piso', dim: '0,40 m' },
+  { id: 'estante', cat: 'Sala', label: 'Estante de livros', dim: '1,90 × 0,36 m' },
   { id: 'camaQueen', cat: 'Quarto', label: 'Cama queen', dim: '1,62 × 2,05 m' },
   { id: 'criadoMudo', cat: 'Quarto', label: 'Criado-mudo', dim: '0,46 × 0,40 m' },
   { id: 'guardaRoupa', cat: 'Quarto', label: 'Guarda-roupa', dim: '1,80 × 0,60 m' },
+  { id: 'camaSolteiro', cat: 'Quarto', label: 'Cama de solteiro', dim: '0,98 × 1,92 m' },
+  { id: 'comoda', cat: 'Quarto', label: 'Cômoda', dim: '1,10 × 0,45 m' },
+  { id: 'escrivaninha', cat: 'Quarto', label: 'Escrivaninha', dim: '1,50 × 0,72 m' },
   { id: 'bancadaIlha', cat: 'Cozinha', label: 'Ilha com cuba', dim: '1,90 × 0,75 m' },
   { id: 'armarioCozinha', cat: 'Cozinha', label: 'Balcão + aéreo', dim: '2,20 × 0,62 m' },
   { id: 'geladeira', cat: 'Cozinha', label: 'Geladeira', dim: '0,75 × 0,72 m' },
   { id: 'mesaJantar', cat: 'Cozinha', label: 'Mesa 4 lugares', dim: '1,70 × 0,95 m' },
   { id: 'bancadaDivisoria', cat: 'Cozinha', label: 'Bancada divisória', dim: '2,60 × 0,42 m' },
+  { id: 'fogao', cat: 'Cozinha', label: 'Fogão', dim: '0,76 × 0,65 m' },
+  { id: 'coifa', cat: 'Cozinha', label: 'Coifa', dim: '0,90 × 0,50 m' },
+  { id: 'microondas', cat: 'Cozinha', label: 'Micro-ondas', dim: '0,52 × 0,38 m' },
   { id: 'pia', cat: 'Banho', label: 'Pia com espelho', dim: '0,90 × 0,50 m' },
   { id: 'vasoSanitario', cat: 'Banho', label: 'Vaso sanitário', dim: '0,40 × 0,68 m' },
   { id: 'chuveiro', cat: 'Banho', label: 'Box de vidro', dim: '0,95 × 0,95 m' },
@@ -719,6 +733,9 @@ const CATALOG = [
   { id: 'fogueira', cat: 'Externo', label: 'Fogueira', dim: '1,20 m' },
   { id: 'arvore', cat: 'Externo', label: 'Árvore', dim: '2,20 m' },
   { id: 'carro', cat: 'Externo', label: 'Carro', dim: '1,85 × 4,50 m' },
+  { id: 'duchaExterna', cat: 'Externo', label: 'Ducha de piscina', dim: '0,50 m' },
+  { id: 'bancoJardim', cat: 'Externo', label: 'Banco de jardim', dim: '1,60 × 0,60 m' },
+  { id: 'floreira', cat: 'Externo', label: 'Floreira', dim: '1,20 × 0,40 m' },
   { id: 'lareira', cat: 'Mansão', label: 'Lareira', dim: '1,90 × 0,50 m' },
   { id: 'pianoCauda', cat: 'Mansão', label: 'Piano de cauda', dim: '1,50 × 2,00 m' },
   { id: 'mesaJantar8', cat: 'Mansão', label: 'Mesa 8 lugares', dim: '2,90 × 1,15 m' },
