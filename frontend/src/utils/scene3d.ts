@@ -94,6 +94,13 @@ for (const r of PLAN) {
 }
 if (window.PROJECT_FLOORS) startFloors = window.PROJECT_FLOORS;
 const built = () => PLAN.filter(r => !r.ext);
+// Pavimento mais alto que de fato tem cômodo construído. Difere de floors - 1 quando o
+// projeto declara mais pavimentos do que foram usados — aí quem manda é o que está de pé.
+const topBuilt = () => {
+  let f = 0;
+  for (const r of built()) if (r.visible !== false) f = Math.max(f, r.f);
+  return f;
+};
 
 // ---------- renderer ----------
 const canvas = document.getElementById('c');
@@ -265,8 +272,9 @@ function makeCeil(r) {
     r.ceil = null;
   }
   if (r.ext || r.visible === false) return;
-  // No último pavimento quem cobre é o telhado.
-  if (r.f >= floors - 1) return;
+  // No último pavimento quem cobre é o telhado. Vale o último pavimento REAL: se o projeto
+  // diz sobrado mas só o térreo foi construído, o telhado desce e cobre o térreo.
+  if (r.f >= topBuilt()) return;
   // Se há um cômodo logo acima, a laje dele já serve de teto para este.
   // Soma a área coberta por TODOS os cômodos de cima: um sozinho raramente cobre este
   // por inteiro, mas juntos costumam cobrir.
@@ -373,8 +381,12 @@ function makeRoof(topF) {
   // Cobre a pegada da casa INTEIRA, não só a do último pavimento: quando o térreo é
   // maior que o andar de cima, seus cômodos ficavam sem cobertura, aparecendo como
   // caixas abertas ao redor do telhado.
-  const rooms = built();
+  const rooms = built().filter(r => r.visible !== false);
   if (!rooms.length) return;
+  // O telhado assenta no pavimento mais alto que REALMENTE tem cômodo, não no número de
+  // pavimentos declarado no projeto: um projeto marcado como sobrado mas construído só no
+  // térreo deixava o telhado boiando um andar inteiro acima das paredes.
+  topF = Math.min(topF, topBuilt());
   let x1 = Infinity, x2 = -Infinity, z1 = Infinity, z2 = -Infinity;
   for (const r of rooms) {
     const hw = r.rot ? r.d / 2 : r.w / 2, hd = r.rot ? r.w / 2 : r.d / 2;
